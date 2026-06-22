@@ -214,6 +214,60 @@ def cmd_diff(args: argparse.Namespace) -> int:
     return 0
 
 
+# Maps each `edit`/`set-field` CLI dest to its codec field name.
+EDIT_FLAGS = {
+    "channel": "midi_channel",
+    "octave": "keybed_octave",
+    "transpose": "transpose",
+    "arp": "arp_enabled",
+    "arp_mode": "arp_mode",
+    "time_div": "time_division",
+    "clock": "clock",
+    "latch": "arp_latch",
+    "tempo": "tempo",
+    "taps": "tempo_taps",
+    "arp_octave": "arp_octave",
+}
+
+
+def _collect_edits(args: argparse.Namespace) -> dict:
+    values: dict = {}
+    for dest, field in EDIT_FLAGS.items():
+        v = getattr(args, dest, None)
+        if v is None:
+            continue
+        if field in ("arp_enabled", "arp_latch"):
+            v = v == "on"
+        values[field] = v
+    return values
+
+
+def cmd_edit(args: argparse.Namespace) -> int:
+    from .model import Program
+
+    values = _collect_edits(args)
+    if not values:
+        _eprint("nothing to change (pass at least one field flag, e.g. --channel 5)")
+        return 2
+    dev = _make_device(args)
+    before = dev.get_program(args.slot)
+    patched = Program(
+        slot=args.slot,
+        values={**codec.decode_program(before.raw), **values},
+        raw=before.raw,
+    )
+    result = dev.send_program(patched, verify=not args.no_verify)
+    after = dev.get_program(args.slot)
+    print(f"Wrote program {result.slot}; verified={result.verified}; "
+          f"backup={result.backup_path}")
+    for c in codec.diff_payloads(before.raw, after.raw):
+        label = c.field or f"idx{c.index}"
+        print(f"  {label}: {c.old} -> {c.new}")
+    if "tempo_taps" in values:
+        _eprint("note: --taps writes idx 9 (tempo_taps), confirmed by elimination only")
+    return 0
+
+
 def cmd_load(args: argparse.Namespace) -> int:
     preset = Preset.load(args.file)
     dev = _make_device(args)
@@ -311,6 +365,22 @@ def build_parser() -> argparse.ArgumentParser:
     df.add_argument("a", help="baseline JSON file")
     df.add_argument("b", help="changed JSON file")
     df.set_defaults(func=cmd_diff)
+
+    ed = sub.add_parser("edit", help="change one or more fields on a slot")
+    ed.add_argument("slot", type=int, choices=(1, 2, 3, 4))
+    ed.add_argument("--channel", type=int)
+    ed.add_argument("--octave", type=int)
+    ed.add_argument("--transpose", type=int)
+    ed.add_argument("--arp", choices=("on", "off"))
+    ed.add_argument("--arp-mode", dest="arp_mode", choices=tuple(codec.ARP_MODES.values()))
+    ed.add_argument("--time-div", dest="time_div", choices=tuple(codec.TIME_DIVISIONS.values()))
+    ed.add_argument("--clock", choices=tuple(codec.CLOCK_SOURCES.values()))
+    ed.add_argument("--latch", choices=("on", "off"))
+    ed.add_argument("--tempo", type=int)
+    ed.add_argument("--taps", type=int)
+    ed.add_argument("--arp-octave", dest="arp_octave", type=int)
+    ed.add_argument("--no-verify", action="store_true")
+    ed.set_defaults(func=cmd_edit)
 
     s = sub.add_parser("set", help="write one program from a JSON file")
     s.add_argument("slot", type=int, choices=(1, 2, 3, 4))
