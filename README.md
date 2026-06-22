@@ -6,22 +6,24 @@ A cross-platform program editor and SysEx library for the **Akai LPK25 mk1**.
 The official editor only runs on Windows and legacy macOS; this project brings
 program editing to modern macOS and Linux.
 
-> **Project status: early / Phase 0.** The mk1's SysEx protocol is not publicly
-> documented. This release ships the library, CLI, and a *provisional* protocol
-> derived from the closely-related Akai LPD8 mk1. The next step is confirming it
-> against real hardware — see **Help reverse-engineer** below. Until then,
-> decoded program *values* may be wrong, but raw bytes and round-trip backups
-> are exact and safe.
+> **Project status: protocol confirmed against real hardware.** The mk1's SysEx
+> protocol isn't publicly documented, so it was reverse-engineered directly
+> against a real LPK25 mk1. The model byte (`0x76`), framing, opcodes, and **12 of
+> the 13 program bytes are verified** (only `tempo_taps` rests on by-elimination).
+> The CLI can read, edit, back up, and write programs safely — every write
+> auto-backs-up and read-back-verifies. See `docs/protocol.md` for the full byte map.
 
 ## Features
 
-- Read all 4 programs from the device and save as JSON.
-- Edit programs as JSON and write them back, with automatic backup and
-  read-back verification.
-- Back up / restore the whole device.
-- Discovery tools: device inquiry, model-byte probing, raw MIDI capture, and a
-  live MIDI monitor.
-- A clean Python library (`lpk25`) that a future GUI can build on.
+- **Read & display** all 4 programs — `show` prints a human-readable table, or
+  dump to JSON.
+- **Edit from the command line** — `edit <slot> --channel 5 --octave -1 …` patches
+  individual parameters, with automatic backup and read-back verification.
+- **Named preset library** — save a config under a name and apply it to any slot.
+- **Back up / restore** the whole device (JSON, plus raw `.syx` replay).
+- **Discovery tools** — device inquiry, model-byte probing, raw MIDI capture, and a
+  live MIDI monitor (the behavioural oracle used to map the protocol).
+- A clean, fully unit-tested Python library (`lpk25`) that a future GUI can build on.
 
 ## Install
 
@@ -66,29 +68,27 @@ Try the CLI with no hardware using the built-in fake device:
 lpk25 --mock dump
 ```
 
-If the model byte differs from the default guess, pass it explicitly once
-`identify` finds it:
+The model byte is confirmed as `0x76` (the default). If a future firmware
+revision ever differs, override it explicitly:
 
 ```bash
 lpk25 --model 0x77 dump
 ```
 
-## Help reverse-engineer the mk1 protocol
+## Protocol status
 
-Because there's no editor to capture from, we verify the protocol directly
-against the device. If you have an LPK25 mk1, this is the most valuable thing you
-can contribute:
+The mk1 protocol was reverse-engineered against a real LPK25 mk1 and is fully
+documented in [`docs/protocol.md`](docs/protocol.md): the model byte, frame
+structure, opcodes, and the complete 13-byte program map. **12 of 13 program
+bytes are hardware-confirmed**; only `tempo_taps` (idx 9) rests on
+by-elimination. The mapping was done with the `diff` tool (change one setting on
+the device, dump, and see which byte moved) and the `monitor` behavioural oracle
+(write a value, play a key, observe the note channel/number).
 
-1. `lpk25 identify` — note which model byte (if any) responds, and the device
-   inquiry output.
-2. `lpk25 raw-recv -o capture.syx --seconds 20` while pressing the device's
-   buttons (octave up/down, arp on/off, latch, tap tempo) — share the printed
-   bytes.
-3. Once a model responds, `lpk25 --model 0xNN dump -o dump.json` and share it.
-
-These let us confirm the framing, the model byte, the program length, and then
-map each field. See `docs/protocol.md` for current status and method, and
-`docs/superpowers/specs/` for the full design.
+If you have an LPK25 mk1 and want to verify on your own unit — or help pin down
+`tempo_taps` — `lpk25 identify`, `lpk25 diff`, and `lpk25 monitor` are the tools
+that drove the mapping. See `docs/discovery-checklist.md` for the method and
+`docs/superpowers/specs/` for the design.
 
 ## Development
 
