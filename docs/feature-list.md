@@ -12,28 +12,29 @@ Each of the **4 presets** holds these editable parameters:
 
 | # | Parameter | Range / values | Status |
 |---|-----------|----------------|--------|
-| 1 | MIDI channel | 1–16 | 🟡 codec field (provisional offset) |
-| 2 | Transposition | −12 … +12 semitones | 🟡 |
-| 3 | Octave (preset default) | −4 … +4 | 🟡 |
-| 4 | Arp octave (range) | **0–3** | 🟡 (corrected from 1–4) |
-| 5 | Arp enable | on / off | 🟡 |
-| 6 | Arp mode | Up, Down, Inclusive, Exclusive, Order, Random | 🟡 (byte order TBD) |
-| 7 | Arp time division | 1/4, 1/4T, 1/8, 1/8T, 1/16, 1/16T, 1/32, 1/32T | 🟡 |
-| 8 | Arp clock | internal / external | 🟡 |
-| 9 | Arp latch | on / off | 🟡 |
-| 10 | Tap-tempo taps | 2 / 3 / 4 | 🟡 |
-| 11 | Tempo | 30–240 BPM (likely 2 bytes on device) | 🟡 |
+| 1 | MIDI channel | 1–16 | ✅ idx 1, `byte+1` (wrote ch10 → keys on ch10) |
+| 2 | Transposition | −12 … +12 semitones | ✅ idx 3, `byte−12` (wrote +12 → notes +12) |
+| 3 | Octave (preset default) | −4 … +4 | ✅ idx 2, `byte−4` |
+| 4 | Arp octave (range) | **0–3** | ✅ idx 12, direct |
+| 5 | Arp enable | on / off | ✅ idx 4 |
+| 6 | Arp mode | Up, Down, Inclusive, Exclusive, Order, Random | ✅ idx 5 (codes = editor order, Up=0 Excl=3) |
+| 7 | Arp time division | 1/4, 1/4T, 1/8, 1/8T, 1/16, 1/16T, 1/32, 1/32T | ✅ idx 6, 0…7 |
+| 8 | Arp clock | internal / external | ✅ idx 7 (`1`=external stalled the arp) |
+| 9 | Arp latch | on / off | ✅ idx 8 (`1` → arp ran after release) |
+| 10 | Tap-tempo taps | 2 / 3 / 4 | 🟡 idx 9 (by elimination; default `03`) |
+| 11 | Tempo | 30–240 BPM (2 bytes on device) | ✅ idx 10–11, 14-bit `(hi<<7)\|lo` |
 
-All "🟡" become "✅" once the byte layout is confirmed against hardware.
+12 of 13 program bytes confirmed on real hardware (2026-06-23); only tempo_taps
+rests on by-elimination. See `docs/protocol.md` for the full byte map.
 
 ## 2. Device operations (talk to the LPK25)
 
 | Feature | Editor equivalent | Status |
 |---------|-------------------|--------|
-| Read one preset (1–4) from device | GET PRESET | 🟡 (`get`) needs real framing confirmed |
-| Read all 4 presets | — | 🟡 (`dump`) |
-| Write/upload one preset to a slot | COMMIT – UPLOAD | 🟡 (`set`) |
-| Write all 4 presets | — | 🟡 (`load`) |
+| Read one preset (1–4) from device | GET PRESET | ✅ (`get`) framing confirmed on hardware |
+| Read all 4 presets | — | ✅ (`dump`) |
+| Write/upload one preset to a slot | COMMIT – UPLOAD | ✅ (`set`) round-trip byte-exact + read-back verify |
+| Write all 4 presets | — | 🟡 (`load`) — same path as `set`, not yet exercised on all 4 |
 | Choose target slot (PRESET #) | EDIT PRESET field | ✅ (slot arg) |
 | Copy preset (read slot A → write slot B) | copy workflow | ⬜ (compose get + set) |
 | Recall/activate a preset on device | (hardware PROGRAM + PROG key) | 🟡 (`activate` builder exists, no CLI cmd) |

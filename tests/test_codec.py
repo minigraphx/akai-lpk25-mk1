@@ -2,8 +2,9 @@ from lpk25 import codec
 
 
 def sample_payload() -> bytes:
-    # Confirmed map: slot, ch(->1), octave(->0), transpose(->0), arp_on,
-    # arp_mode(=exclusive, idx 5), then idx 6-12 still unmapped (base-dump bytes).
+    # Full confirmed map (idx): slot1, ch1, octave0, transpose0, arp_on,
+    # mode=exclusive(3), time_div=1/16T(5), clock=internal(0), latch_off(0),
+    # taps3, tempo=(0,30)=30bpm, arp_oct0.
     return bytes([1, 0, 4, 12, 1, 3, 5, 0, 0, 3, 0, 30, 0])
 
 
@@ -15,9 +16,10 @@ def test_decode_known_fields():
     assert values["arp_enabled"] is True
     assert values["arp_mode"] == "exclusive"  # code 3 at idx 5
     assert values["time_division"] == "1/16T"  # code 5 at idx 6
-    # idx 7, 8, 9, 12 are still unmapped, so those fields are not decoded
-    assert "arp_latch" not in values
-    assert "clock" not in values
+    assert values["clock"] == "internal"  # byte 0 at idx 7
+    assert values["arp_latch"] is False  # byte 0 at idx 8
+    assert values["tempo_taps"] == 3  # byte 3 at idx 9
+    assert values["arp_octave"] == 0  # byte 0 at idx 12
 
 
 def test_encode_is_inverse_of_decode():
@@ -83,17 +85,16 @@ def test_diff_payloads_identical_is_empty():
     assert codec.diff_payloads(p, p) == []
 
 
-def test_diff_payloads_unmapped_and_length_change():
-    # idx 7 is still unmapped; idx 13 is beyond the normal 13-byte payload.
+def test_diff_payloads_length_change_beyond_payload():
+    # All of idx 0-12 are mapped now; only bytes beyond the 13-byte payload are
+    # unmapped. idx 13 is past the end -> field is None.
     a = bytes([1, 0, 4, 12, 1, 0, 2, 0, 0, 3, 1, 98, 3])           # 13 bytes
-    b = bytes([1, 0, 4, 12, 1, 0, 2, 9, 0, 3, 1, 98, 3, 0x42])     # idx7 changed, idx13 added
+    b = bytes([1, 0, 4, 12, 1, 0, 2, 0, 0, 3, 1, 98, 3, 0x42])     # idx 13 added
     changes = codec.diff_payloads(a, b)
-    by_idx = {c.index: c for c in changes}
-    assert set(by_idx) == {7, 13}
-    assert by_idx[7].old == 0 and by_idx[7].new == 9
-    assert by_idx[13].old is None and by_idx[13].new == 0x42
-    assert by_idx[7].field is None  # idx 7 is unmapped
-    assert by_idx[13].field is None
+    assert len(changes) == 1
+    c = changes[0]
+    assert c.index == 13 and c.old is None and c.new == 0x42
+    assert c.field is None  # nothing maps beyond idx 12
 
 
 def test_keybed_octave_encoding_confirmed():
@@ -184,3 +185,27 @@ def test_transpose_confirmed_idx3():
     assert codec.decode_program(m12)["transpose"] == -12
     assert codec.encode_program({"transpose": 12}, bytes(13))[3] == 24
     assert codec.encode_program({"transpose": 0}, bytes(13))[3] == 12
+
+
+def test_clock_and_latch_confirmed_idx7_idx8():
+    # Hardware (2026-06-23): idx 7 = clock (1=external stalled the arp -> silence);
+    # idx 8 = arp_latch (1 -> arp kept running after key release).
+    base = bytes([1, 0, 4, 12, 1, 0, 2, 0, 0, 3, 1, 98, 3])
+    assert codec.decode_program(base)["clock"] == "internal"
+    assert codec.decode_program(base)["arp_latch"] is False
+    ext = codec.encode_program({"clock": "external"}, base)
+    assert ext[7] == 1 and codec.decode_program(ext)["clock"] == "external"
+    latched = codec.encode_program({"arp_latch": True}, base)
+    assert latched[8] == 1 and codec.decode_program(latched)["arp_latch"] is True
+
+
+def test_full_payload_decodes_all_thirteen_bytes():
+    # A fully-populated program decodes every field (no unmapped gaps in 0-12).
+    raw = bytes([1, 9, 8, 24, 1, 3, 2, 1, 1, 4, 1, 98, 3])
+    v = codec.decode_program(raw)
+    assert v == {
+        "midi_channel": 10, "keybed_octave": 4, "transpose": 12,
+        "arp_enabled": True, "arp_mode": "exclusive", "time_division": "1/8",
+        "clock": "external", "arp_latch": True, "tempo_taps": 4,
+        "tempo": 226, "arp_octave": 3,
+    }

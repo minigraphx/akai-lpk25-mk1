@@ -1,12 +1,12 @@
 # LPK25 mk1 SysEx protocol — working notes
 
-> **Status: PROVISIONAL.** The LPK25 mk1 protocol is not publicly documented and
-> we could not capture the official editor. Everything below is *derived* from
-> the closely-related Akai **LPD8 mk1** (fully reverse-engineered) and the
-> **LPK25 MK2**, and must be confirmed against real hardware. Confirmed facts
-> will be marked ✅; hypotheses are marked 🟡.
+> **Status: CONFIRMED against real hardware (2026-06-23).** Originally *derived*
+> from the Akai **LPD8 mk1** and **LPK25 MK2** (no public mk1 docs, no official
+> editor capture), the framing, model byte, opcodes, and 12 of the 13 program
+> bytes are now verified on a real LPK25 mk1 — only `tempo_taps` (idx 9) rests on
+> by-elimination. Confirmed facts are marked ✅; the lone hypothesis 🟡.
 
-## Frame structure (🟡, derived from LPD8 mk1)
+## Frame structure (✅ confirmed on hardware)
 
 ```
 F0 47 7F <model> <op> <len_hi> <len_lo> [data...] F7
@@ -100,26 +100,27 @@ off:
 | 4 | **arp_enabled** | ✅ **CONFIRMED** — Arp On/Off flips only this byte (`00`↔`01`) |
 | 5 | **arp_mode** | ✅ **CONFIRMED** — Up=`0`, Exclusive=`3` observed. Codes follow the *editor* order (Up,Down,Inclusive,Exclusive,Order,Random), **not** the keybed label order (which prints excl before incl) |
 | 6 | **time_division** | ✅ **CONFIRMED** — hold-ARP + `1/8` key → `2`; standard order 1/4…1/32T = 0…7 |
-| 7 | arp_latch? | 🟡 editor-only (no keybed control) — `00` |
-| 8 | clock? | 🟡 editor-only (no keybed control) — `00` |
-| 9 | tempo_taps? | 🟡 editor-only — `03` (= default 3 taps) |
+| 7 | **clock** | ✅ **CONFIRMED** — writing `1` (with arp on) silenced output (arp stalled, no external clock); `0`=internal, `1`=external |
+| 8 | **arp_latch** | ✅ **CONFIRMED** — writing `1` made one tap arpeggiate forever after release; `0`/`1` |
+| 9 | tempo_taps | 🟡 by elimination (only param left) — `03` = default 3 taps; editor-only, encoding 2–4 unconfirmed |
 | 10–11 | **tempo** | ✅ **CONFIRMED** — 14-bit `(idx10<<7)\|idx11`, range 30–240 (fast tap → idx10 `00`→`01`, value 226) |
 | 12 | **arp_octave** | ✅ **CONFIRMED** — hold-ARP + `arp oct 3` key → `3`; direct 0–3 |
 
-> **Mapping status (2026-06-23):** 8 of 13 bytes confirmed on real hardware.
-> Panel-settable (change-one-setting-and-diff): `octave` (2), `arp_enabled` (4),
-> `arp_mode` (5), `time_division` (6), `tempo` (10–11), `arp_octave` (12).
-> Editor-only, confirmed via **write + behavioural oracle**: `midi_channel` (1)
-> — wrote ch 10, keys transmitted on ch 10; `transpose` (3) — wrote +12, notes
-> shifted +12 semitones. The **write path itself is confirmed**: a round-trip
-> (read → send same bytes → read) is byte-exact and `set` read-back-verifies.
+> **Mapping status (2026-06-23): COMPLETE — 12 of 13 bytes confirmed on real
+> hardware**, the 13th (idx 9 tempo_taps) certain by elimination.
+> - Panel-settable (change-one-setting-and-diff): `octave` (2), `arp_enabled`
+>   (4), `arp_mode` (5), `time_division` (6), `tempo` (10–11), `arp_octave` (12).
+> - Editor-only, confirmed via **write + behavioural oracle**: `midi_channel` (1,
+>   wrote ch 10 → keys on ch 10), `transpose` (3, wrote +12 → notes +12),
+>   `clock` (7, wrote external → arp stalled to silence), `arp_latch` (8, wrote
+>   on → arp ran forever after release).
+> - `tempo_taps` (9): only remaining LPK25 parameter, default `03` = 3 taps;
+>   position certain, the 2–4 range is the hypothesis.
 >
-> **Still hypotheses — idx 7/8/9** (`arp_latch`, `clock`, `tempo_taps`): all
-> editor-only with no keybed control and no simple MIDI-output signature.
-> `idx 9 = 03` matches the default 3 taps (likely `tempo_taps`); `idx 7/8 = 0/0`
-> are `arp_latch`/`clock` in unknown order. `arp_latch` is behaviourally testable
-> (arp-on + latch keeps notes arpeggiating after release); `clock`/`tempo_taps`
-> need the official editor or educated guessing. Raw bytes are exact regardless.
+> The **write path is confirmed**: send-program (`0x61`) works, a round-trip
+> (read → send same bytes → read) is byte-exact, and `set` read-back-verifies.
+> The provisional protocol is now effectively the real one. Raw bytes are exact
+> regardless.
 >
 > Hardware controls observed on the user's unit: keys labeled (after the time-
 > division keys) `up down excl incl order rand`, `arp oct 0..3`, `prog 1..4`;

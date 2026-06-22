@@ -149,6 +149,19 @@ LPK25_MK1_FIELDS: list[Field] = [
     # CONFIRMED (2026-06-23, real hardware): hold-ARP + a time-division key moves
     # only this byte; "1/8" -> 2, matching the standard order in TIME_DIVISIONS.
     Field("time_division", index=6, kind="enum", enum=TIME_DIVISIONS, verified=True),
+    # CONFIRMED (2026-06-23, real hardware): writing idx 7 = 1 (with arp on)
+    # silenced all output -- the arp stalled waiting for an external clock that
+    # wasn't present. So 0 = internal, 1 = external. Restoring 0 brought the arp
+    # back. (This is the clock byte, NOT latch as first guessed.)
+    Field("clock", index=7, kind="enum", enum=CLOCK_SOURCES, verified=True),
+    # CONFIRMED (2026-06-23, real hardware): writing idx 8 = 1 made a single key
+    # tap arpeggiate continuously after release (103 notes over a 14s window vs.
+    # the latch-off baseline that stopped on release). So this is arp_latch (0/1).
+    Field("arp_latch", index=8, kind="bool", verified=True),
+    # idx 9 = tempo_taps by elimination (only remaining LPK25 parameter; default
+    # byte 03 = 3 taps). Editor-only, no clean MIDI signature, so the 2-4 encoding
+    # is unconfirmed -- position is certain, range is the hypothesis.
+    Field("tempo_taps", index=9, kind="int", offset=0, lo=2, hi=4),
     # CONFIRMED (2026-06-23, real hardware): tempo is a 14-bit value spanning
     # idx 10 (high) + idx 11 (low): bpm = (idx10<<7)|idx11. A fast tap pushed it
     # to (1<<7)|98 = 226 BPM, with idx 10 ticking 00->01. Range 30-240.
@@ -156,9 +169,8 @@ LPK25_MK1_FIELDS: list[Field] = [
     # CONFIRMED (2026-06-23, real hardware): hold-ARP + an arp-octave key moves
     # only this trailing byte; "oct 3" -> 3. Direct 0-3 encoding.
     Field("arp_octave", index=12, kind="int", offset=0, lo=0, hi=3, verified=True),
-    # idx 7, 8, 9 STILL UNMAPPED. Remaining params to locate (via latch button,
-    # hold-ARP+labeled-key): arp_latch, clock (CLOCK_SOURCES), tempo_taps (2-4).
-    # Reference bytes at idx 7,8,9 in a base dump: 00 00 03.
+    # All 13 bytes mapped. 12 of 13 confirmed on hardware; only tempo_taps (idx 9)
+    # rests on by-elimination + the default value.
 ]
 
 
