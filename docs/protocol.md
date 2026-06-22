@@ -93,18 +93,26 @@ off:
 
 | idx | field | status |
 |-----|-------|--------|
-| 0 | slot echo | ✅ 1–4 (here `01`) |
-| 1 | midi_channel? | 🟡 `00`; `byte+1`→ch 1 plausible |
-| 2 | keybed_octave? | 🟡 `05`; fits octave +1 (octave-up was pressed) |
-| 3 | transpose? | 🟡 `0c`=12; fits transpose centred at 0 |
-| 4 | **arp_enabled** | ✅ **CONFIRMED** — toggling Arp On/Off flips only this byte (`00`↔`01`) |
-| 5–11 | (MK2-derived guesses) | ❌ **MISALIGNED** — decode to nonsense on real dumps; ordering wrong past idx 4 |
-| 12 | unmapped | 🟡 `00` |
+| 0 | slot echo | ✅ 1–4 |
+| 1 | midi_channel? | 🟡 `byte+1`→ch 1; editor-only, can't panel-test |
+| 2 | **keybed_octave** | ✅ **CONFIRMED** — value = `byte−4` (`00`=−4, `04`=0, `08`=+4; clamps, no wrap) |
+| 3 | transpose? | 🟡 `0c`=12 → 0 with `byte−12`; editor-only, can't panel-test |
+| 4 | **arp_enabled** | ✅ **CONFIRMED** — Arp On/Off flips only this byte (`00`↔`01`) |
+| 5 | **arp_mode** | ✅ **CONFIRMED** — observed Up=`0`, Exclusive=`3`; rest inferred from the editor's order (Up,Down,Inclusive,Exclusive,Order,Random) |
+| 6 | ? | ⬜ unmapped (base `05`) |
+| 7 | ? | ⬜ unmapped (`00`) |
+| 8 | ? | ⬜ unmapped (`00`) |
+| 9 | ? | ⬜ unmapped (`03`) |
+| 10–11 | **tempo** | ✅ **CONFIRMED** — 14-bit `(idx10<<7)\|idx11`, range 30–240 (fast tap → idx10 `00`→`01`, value 226) |
+| 12 | ? | ⬜ unmapped (`00`) |
 
-> **Important:** the old MK2-derived ordering for idx 5–11 is now known to be
-> wrong (it decodes real dumps to e.g. tempo=0, arp_octave=30). Treat all decoded
-> values except `slot` and `arp_enabled` as untrusted until each is confirmed
-> one-at-a-time. Raw bytes are always exact.
+> **Mapping status (2026-06-23):** confirmed by change-one-setting-and-diff on
+> real hardware: `octave` (idx 2), `arp_enabled` (idx 4), `arp_mode` (idx 5),
+> `tempo` (idx 10–11). Still to locate at idx 6/7/8/9/12: `arp_latch`,
+> `time_division`, `clock`, `tempo_taps`, `arp_octave`. `midi_channel` (idx 1)
+> and `transpose` (idx 3) are editor-only on the mk1 (no panel control), so they
+> stay hypotheses until checked via the write path + behavioural oracle. Raw
+> bytes are always exact regardless.
 
 ### Read reliability (fixed 2026-06-22)
 

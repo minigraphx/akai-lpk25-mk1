@@ -17,12 +17,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-# Enumerations (labels <-> device byte values). Order is provisional.
+# Arp modes. CONFIRMED on real hardware (2026-06-22): Up=0 and Exclusive=3
+# (the codec previously had Inclusive/Exclusive swapped). The remaining order
+# follows the official editor list (Up, Down, Inclusive, Exclusive, Order,
+# Random); Down/Inclusive/Order/Random codes are inferred, not yet observed.
 ARP_MODES: dict[int, str] = {
     0: "up",
     1: "down",
-    2: "exclusive",
-    3: "inclusive",
+    2: "inclusive",
+    3: "exclusive",
     4: "order",
     5: "random",
 }
@@ -50,8 +53,10 @@ class Field:
     """One decodable field within the program payload.
 
     ``index`` is the byte offset into the data payload (where index 0 is the
-    program/slot echo). ``kind`` is one of ``int``/``bool``/``enum``.
-    For ``int`` fields the semantic value is ``byte + offset``.
+    program/slot echo). ``kind`` is one of ``int``/``bool``/``enum``/``u14``.
+    For ``int`` fields the semantic value is ``byte + offset``. ``u14`` is a
+    14-bit big-endian value split across two 7-bit bytes at ``index`` (high) and
+    ``index+1`` (low): ``value = (hi << 7) | lo`` — used for tempo (30-240).
     """
 
     name: str
@@ -63,6 +68,11 @@ class Field:
     enum: dict[int, str] | None = None
     verified: bool = False
 
+    @property
+    def span(self) -> int:
+        """Number of payload bytes this field occupies."""
+        return 2 if self.kind == "u14" else 1
+
     def decode(self, raw: bytes) -> Any:
         b = raw[self.index]
         if self.kind == "bool":
@@ -70,6 +80,8 @@ class Field:
         if self.kind == "enum":
             assert self.enum is not None
             return self.enum.get(b, b)  # unknown codes pass through as ints
+        if self.kind == "u14":
+            return ((b << 7) | raw[self.index + 1]) + self.offset
         return b + self.offset
 
     def encode_into(self, buf: bytearray, value: Any) -> None:
@@ -90,10 +102,16 @@ class Field:
         v = int(value)
         if self.lo is not None and self.hi is not None and not (self.lo <= v <= self.hi):
             raise CodecError(f"{self.name}={v} out of range [{self.lo}, {self.hi}]")
-        byte = v - self.offset
-        if not (0 <= byte <= 0x7F):
-            raise CodecError(f"{self.name}={v} encodes to non-7-bit byte {byte}")
-        buf[self.index] = byte
+        raw_value = v - self.offset
+        if self.kind == "u14":
+            if not (0 <= raw_value <= 0x3FFF):
+                raise CodecError(f"{self.name}={v} encodes to non-14-bit value {raw_value}")
+            buf[self.index] = (raw_value >> 7) & 0x7F
+            buf[self.index + 1] = raw_value & 0x7F
+            return
+        if not (0 <= raw_value <= 0x7F):
+            raise CodecError(f"{self.name}={v} encodes to non-7-bit byte {raw_value}")
+        buf[self.index] = raw_value
 
 
 # LPK25 mk1 program field map. data[0] is the slot echo, handled separately by
@@ -109,22 +127,27 @@ class Field:
 # verified=False and decoded values must not be trusted until each is confirmed
 # one-at-a-time via the change-one-byte-and-diff method. idx 12 is unmapped.
 LPK25_MK1_FIELDS: list[Field] = [
-    # idx 2 = 05 fits "octave +1" (you'd pressed octave-up); idx 3 = 0x0c = 12
-    # fits transpose centred at 0. Plausible but UNCONFIRMED (no clean baseline).
+    # idx 1 / idx 3: editor-only params (no panel control), so they can't be
+    # mapped by the change-and-diff method. Positions are hypotheses: idx 1 = 00
+    # -> channel 1 (byte+1); idx 3 = 0x0c = 12 -> transpose 0 (centred at 12).
     Field("midi_channel", index=1, kind="int", offset=1, lo=1, hi=16),
-    Field("keybed_octave", index=2, kind="int", offset=0, lo=-4, hi=4),
-    Field("transpose", index=3, kind="int", offset=0, lo=-12, hi=12),
+    # CONFIRMED (2026-06-22, real hardware): octave up/down moves only this byte;
+    # value = byte - 4 (byte 0x00 = -4, 0x04 = 0, 0x08 = +4; clamps, no wrap).
+    Field("keybed_octave", index=2, kind="int", offset=-4, lo=-4, hi=4, verified=True),
+    Field("transpose", index=3, kind="int", offset=-12, lo=-12, hi=12),
     # CONFIRMED (2026-06-22, real hardware): Arp On/Off toggles exactly this byte.
     Field("arp_enabled", index=4, kind="bool", verified=True),
-    # --- everything below is MISALIGNED/unconfirmed; do not trust decoded values.
-    Field("arp_latch", index=5, kind="bool"),
-    Field("arp_mode", index=6, kind="enum", enum=ARP_MODES),
-    Field("time_division", index=7, kind="enum", enum=TIME_DIVISIONS),
-    Field("clock", index=8, kind="enum", enum=CLOCK_SOURCES),
-    Field("tempo_taps", index=9, kind="int", offset=0, lo=2, hi=4),
-    Field("tempo", index=10, kind="int", offset=0, lo=30, hi=240),
-    # Arp octave is 0-3 (hardware labels ARP OCT 0-3 and editor guide).
-    Field("arp_octave", index=11, kind="int", offset=0, lo=0, hi=3),
+    # CONFIRMED (2026-06-22, real hardware): arp mode lives here (NOT idx 6 as the
+    # MK2-derived guess had it). Observed Up=0, Exclusive=3; rest inferred.
+    Field("arp_mode", index=5, kind="enum", enum=ARP_MODES, verified=True),
+    # CONFIRMED (2026-06-23, real hardware): tempo is a 14-bit value spanning
+    # idx 10 (high) + idx 11 (low): bpm = (idx10<<7)|idx11. A fast tap pushed it
+    # to (1<<7)|98 = 226 BPM, with idx 10 ticking 00->01. Range 30-240.
+    Field("tempo", index=10, kind="u14", lo=30, hi=240, verified=True),
+    # idx 6, 7, 8, 9, 12 STILL UNMAPPED. Remaining params to locate (via
+    # hold-ARP+labeled-key, latch): arp_latch, time_division (TIME_DIVISIONS),
+    # clock (CLOCK_SOURCES), tempo_taps (2-4), arp_octave (0-3).
+    # Reference bytes at idx 6-9,12 in a base dump: 05 00 00 03 ... 00.
 ]
 
 
@@ -134,7 +157,7 @@ def decode_program(payload: bytes, fields: list[Field] | None = None) -> dict[st
     fields = fields if fields is not None else LPK25_MK1_FIELDS
     out: dict[str, Any] = {}
     for f in fields:
-        if f.index < len(payload):
+        if f.index + f.span <= len(payload):
             out[f.name] = f.decode(payload)
     return out
 
@@ -188,7 +211,8 @@ def diff_payloads(
     with the mapped field name (if known). The core of the ``lpk25 diff`` tool
     used to map fields by changing one device setting at a time."""
     fields = fields if fields is not None else LPK25_MK1_FIELDS
-    by_index = {f.index: f for f in fields}
+    # Map every byte a field occupies (multi-byte fields cover index..index+span-1).
+    by_index = {f.index + k: f for f in fields for k in range(f.span)}
     changes: list[ByteChange] = []
     for i in range(max(len(a), len(b))):
         av = a[i] if i < len(a) else None

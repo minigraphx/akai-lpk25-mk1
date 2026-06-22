@@ -160,9 +160,11 @@ class MockTransport(Transport):
 
         self._protocol = protocol
         self.model = model
-        # slot -> payload (payload[0] is the slot echo).
+        # slot -> payload (payload[0] is the slot echo). Realistic 13-byte layout
+        # matching the confirmed map: ch 1, octave 0 (idx2=4), transpose 0
+        # (idx3=12), arp off, mode up (idx5=0), tempo 120 (idx10:11 = 0,120).
         self.programs: dict = programs or {
-            s: bytes([s, s, 4, 12, 0, 0, 0, 4, 0, 3, 120, 0]) for s in range(1, 5)
+            s: bytes([s, 0, 4, 12, 0, 0, 5, 0, 0, 3, 0, 120, 0]) for s in range(1, 5)
         }
         self.active = 1
         self.sent: list[bytes] = []
