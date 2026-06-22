@@ -75,3 +75,40 @@ def test_show_json(capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert '"programs"' in out            # falls back to dump JSON
+
+
+def test_preset_save_and_apply_cross_slot(tmp_path, monkeypatch):
+    monkeypatch.setenv("LPK25_PRESET_DIR", str(tmp_path))
+    tr = MockTransport()
+    # make slot 1 distinctive, then save it as a preset
+    run(["--mock", "edit", "1", "--channel", "7", "--tempo", "150"], tr)
+    assert run(["--mock", "preset", "save", "myset", "--from-slot", "1"], tr) == 0
+    # apply onto slot 3
+    assert run(["--mock", "preset", "apply", "myset", "3"], tr) == 0
+    v = codec.decode_program(tr.programs[3])
+    assert v["midi_channel"] == 7 and v["tempo"] == 150
+    # slot-echo byte was corrected to the target slot (read-back verify passed)
+    assert tr.programs[3][0] == 3
+
+
+def test_preset_save_refuses_overwrite(tmp_path, monkeypatch):
+    monkeypatch.setenv("LPK25_PRESET_DIR", str(tmp_path))
+    tr = MockTransport()
+    assert run(["--mock", "preset", "save", "dup", "--from-slot", "1"], tr) == 0
+    assert run(["--mock", "preset", "save", "dup", "--from-slot", "1"], tr) != 0
+    assert run(["--mock", "preset", "save", "dup", "--from-slot", "1", "--force"], tr) == 0
+
+
+def test_preset_apply_missing_errors(tmp_path, monkeypatch):
+    monkeypatch.setenv("LPK25_PRESET_DIR", str(tmp_path))
+    tr = MockTransport()
+    assert run(["--mock", "preset", "apply", "ghost", "1"], tr) != 0
+
+
+def test_preset_list(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("LPK25_PRESET_DIR", str(tmp_path))
+    tr = MockTransport()
+    run(["--mock", "preset", "save", "alpha", "--from-slot", "1"], tr)
+    capsys.readouterr()  # clear
+    assert run(["--mock", "preset", "list"], tr) == 0
+    assert "alpha" in capsys.readouterr().out

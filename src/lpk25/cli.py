@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import __version__, codec, protocol, render
+from . import __version__, codec, library, protocol, render
 from .model import Preset
 
 
@@ -280,6 +280,41 @@ def cmd_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_preset(args: argparse.Namespace) -> int:
+    from .model import Program
+
+    if args.preset_action == "list":
+        rows = library.list_presets()
+        if not rows:
+            print("(no presets)")
+            return 0
+        for name, prog in rows:
+            v = codec.decode_program(prog.raw)
+            print(f"{name}: ch{v['midi_channel']} oct{v['keybed_octave']:+d} "
+                  f"arp={'on' if v['arp_enabled'] else 'off'} tempo{v['tempo']}")
+        return 0
+
+    if args.preset_action == "save":
+        dev = _make_device(args)
+        prog = dev.get_program(args.from_slot)
+        path = library.save_preset(args.name, prog, force=args.force)
+        print(f"Saved preset {args.name} to {path}")
+        return 0
+
+    if args.preset_action == "apply":
+        prog = library.load_preset(args.name)
+        # correct the slot-echo byte so read-back verify matches the target slot
+        fixed = Program.from_payload(args.slot, bytes([args.slot]) + prog.raw[1:])
+        dev = _make_device(args)
+        result = dev.send_program(fixed, verify=not args.no_verify)
+        print(f"Applied preset {args.name} to slot {result.slot}; "
+              f"verified={result.verified}")
+        return 0
+
+    _eprint("unknown preset action")
+    return 2
+
+
 def cmd_load(args: argparse.Namespace) -> int:
     preset = Preset.load(args.file)
     dev = _make_device(args)
@@ -398,6 +433,25 @@ def build_parser() -> argparse.ArgumentParser:
     sh.add_argument("slot", type=int, nargs="?", choices=(1, 2, 3, 4))
     sh.add_argument("--json", action="store_true", help="print dump JSON instead")
     sh.set_defaults(func=cmd_show)
+
+    pr = sub.add_parser("preset", help="named single-program preset library")
+    pr_sub = pr.add_subparsers(dest="preset_action", required=True)
+
+    pr_save = pr_sub.add_parser("save", help="save a slot as a named preset")
+    pr_save.add_argument("name")
+    pr_save.add_argument("--from-slot", dest="from_slot", type=int,
+                         choices=(1, 2, 3, 4), default=1)
+    pr_save.add_argument("--force", action="store_true")
+    pr_save.set_defaults(func=cmd_preset)
+
+    pr_apply = pr_sub.add_parser("apply", help="write a named preset onto a slot")
+    pr_apply.add_argument("name")
+    pr_apply.add_argument("slot", type=int, choices=(1, 2, 3, 4))
+    pr_apply.add_argument("--no-verify", action="store_true")
+    pr_apply.set_defaults(func=cmd_preset)
+
+    pr_list = pr_sub.add_parser("list", help="list saved presets")
+    pr_list.set_defaults(func=cmd_preset)
 
     s = sub.add_parser("set", help="write one program from a JSON file")
     s.add_argument("slot", type=int, choices=(1, 2, 3, 4))
