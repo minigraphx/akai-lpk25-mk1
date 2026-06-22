@@ -58,12 +58,12 @@ rests on by-elimination. See `docs/protocol.md` for the full byte map.
 |---------|--------|
 | List/auto-detect MIDI ports | ✅ (`ports`) |
 | Probe candidate model bytes (read-only) | ✅ (`identify` → probe) |
-| ~~Universal Device Inquiry~~ | ❌ **not supported by device** (per MIDI chart) — probing is primary |
+| Universal Device Inquiry | ✅ **supported** — real hardware answers it (family LSB = model `0x76`), contradicting the MIDI chart; confirms model + probe agree |
 | Capture raw MIDI/SysEx to file | ✅ (`raw-recv`) |
 | Replay captured SysEx | ✅ (`raw-send`) |
 | Live MIDI monitor (behavioural oracle) | ✅ (`monitor`) |
-| Round-trip integrity check (read→write same→read) | ✅ (verified via `set` read-back) |
-| **Hardware-assisted field mapping** | ⬜ guide: set Time Div / Arp Mode / Arp Octave on the device (hold ARP ON/OFF + labeled key), then `dump` to see which byte changed |
+| Round-trip integrity check (read→write same→read) | ✅ confirmed on hardware (byte-exact + read-back verify) |
+| **Hardware-assisted field mapping** | ✅ done — all panel params mapped via change-one-setting-and-`diff`; editor-only fields confirmed via write + behavioural oracle |
 
 ## 5. Safety
 
@@ -81,7 +81,7 @@ rests on by-elimination. See `docs/protocol.md` for the full byte map.
 | Feature | Status |
 |---------|--------|
 | Pure-Python core, unit-testable without hardware | ✅ |
-| Unit tests (codec/protocol/model/mock) | ✅ (22) |
+| Unit tests (codec/protocol/model/mock/cli) | ✅ (65) |
 | Lint (ruff) | ✅ |
 | CI (ruff + pytest, 3.9 & 3.12) | ✅ |
 | Linux support | ✅ (primary dev target) |
@@ -105,4 +105,7 @@ hold ARP ON/OFF + labeled key to set Time Division / Arp Mode / Arp Octave.
 ## Not supported by the device (per MIDI chart)
 
 Program Change, Bank Select, Pitch Bend, Aftertouch, NRPN/RPN, MIDI Clock
-*transmit* (it only *receives* external clock), Device Inquiry, GM/DLS.
+*transmit* (it only *receives* external clock), GM/DLS.
+
+(The MIDI chart also lists **Device Inquiry** as unsupported, but real hardware
+*does* answer it — see section 4 and `docs/protocol.md`.)
