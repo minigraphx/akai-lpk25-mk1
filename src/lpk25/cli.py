@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import __version__, codec, protocol
+from . import __version__, codec, protocol, render
 from .model import Preset
 
 
@@ -268,6 +268,18 @@ def cmd_edit(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_show(args: argparse.Namespace) -> int:
+    dev = _make_device(args)
+    if args.json:
+        print(dev.dump().to_json())
+        return 0
+    if args.slot is not None:
+        print(render.format_program(dev.get_program(args.slot)))
+        return 0
+    print(render.format_presets_table(dev.dump(), dev.get_active_program()))
+    return 0
+
+
 def cmd_load(args: argparse.Namespace) -> int:
     preset = Preset.load(args.file)
     dev = _make_device(args)
@@ -381,6 +393,11 @@ def build_parser() -> argparse.ArgumentParser:
     ed.add_argument("--arp-octave", dest="arp_octave", type=int)
     ed.add_argument("--no-verify", action="store_true")
     ed.set_defaults(func=cmd_edit)
+
+    sh = sub.add_parser("show", help="human-readable readout of the device state")
+    sh.add_argument("slot", type=int, nargs="?", choices=(1, 2, 3, 4))
+    sh.add_argument("--json", action="store_true", help="print dump JSON instead")
+    sh.set_defaults(func=cmd_show)
 
     s = sub.add_parser("set", help="write one program from a JSON file")
     s.add_argument("slot", type=int, choices=(1, 2, 3, 4))

@@ -49,3 +49,29 @@ def test_edit_rejects_out_of_range():
     assert rc != 0
     # nothing written: channel byte unchanged (default 0 -> channel 1)
     assert codec.decode_program(tr.programs[1])["midi_channel"] == 1
+
+
+def test_show_table(capsys):
+    tr = MockTransport()
+    rc = run(["--mock", "show"], tr)
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "tempo" in out                 # header present
+    assert out.count("\n") >= 5           # header + 4 slots
+    assert "▶" in out                # active slot marked
+
+
+def test_show_single_slot(capsys):
+    tr = MockTransport()
+    rc = run(["--mock", "show", "1"], tr)
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert out.startswith("slot 1")
+
+
+def test_show_json(capsys):
+    tr = MockTransport()
+    rc = run(["--mock", "show", "--json"], tr)
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert '"programs"' in out            # falls back to dump JSON
