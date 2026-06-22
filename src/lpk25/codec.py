@@ -127,10 +127,12 @@ class Field:
 # verified=False and decoded values must not be trusted until each is confirmed
 # one-at-a-time via the change-one-byte-and-diff method. idx 12 is unmapped.
 LPK25_MK1_FIELDS: list[Field] = [
-    # idx 1 / idx 3: editor-only params (no panel control), so they can't be
-    # mapped by the change-and-diff method. Positions are hypotheses: idx 1 = 00
-    # -> channel 1 (byte+1); idx 3 = 0x0c = 12 -> transpose 0 (centred at 12).
-    Field("midi_channel", index=1, kind="int", offset=1, lo=1, hi=16),
+    # CONFIRMED (2026-06-23, real hardware): wrote channel 10 (byte 9) to slot 1,
+    # played keys, and every note-on transmitted on channel 10 (status 0x99).
+    # Encoding: value = byte + 1 (byte 0 -> channel 1).
+    Field("midi_channel", index=1, kind="int", offset=1, lo=1, hi=16, verified=True),
+    # idx 3 transpose: editor-only (no panel control); hypothesis 0x0c=12 ->
+    # transpose 0 (centred at 12), to confirm via the write path + note numbers.
     # CONFIRMED (2026-06-22, real hardware): octave up/down moves only this byte;
     # value = byte - 4 (byte 0x00 = -4, 0x04 = 0, 0x08 = +4; clamps, no wrap).
     Field("keybed_octave", index=2, kind="int", offset=-4, lo=-4, hi=4, verified=True),

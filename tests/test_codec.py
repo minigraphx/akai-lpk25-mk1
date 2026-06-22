@@ -166,3 +166,11 @@ def test_arp_octave_confirmed_idx12():
     changes = codec.diff_payloads(base, oct3)
     assert len(changes) == 1 and changes[0].index == 12
     assert changes[0].field == "arp_octave"
+
+
+def test_midi_channel_confirmed_idx1():
+    # Hardware (2026-06-23): wrote ch 10 (byte 9), keys transmitted on ch 10.
+    ch10 = bytes([1, 9, 4, 12, 0, 0, 5, 0, 0, 3, 0, 120, 0])
+    assert codec.decode_program(ch10)["midi_channel"] == 10
+    assert codec.encode_program({"midi_channel": 10}, bytes(13))[1] == 9
+    assert codec.encode_program({"midi_channel": 1}, bytes(13))[1] == 0
