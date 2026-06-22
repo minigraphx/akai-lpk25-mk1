@@ -1,5 +1,7 @@
 # lpk25 — Akai LPK25 mk1 editor (macOS / Linux)
 
+![Akai LPK25 mk1](docs/images/lpk25-mk1-front.jpg)
+
 A cross-platform program editor and SysEx library for the **Akai LPK25 mk1**.
 The official editor only runs on Windows and legacy macOS; this project brings
 program editing to modern macOS and Linux.
