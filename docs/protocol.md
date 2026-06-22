@@ -98,21 +98,27 @@ off:
 | 2 | **keybed_octave** | ✅ **CONFIRMED** — value = `byte−4` (`00`=−4, `04`=0, `08`=+4; clamps, no wrap) |
 | 3 | transpose? | 🟡 `0c`=12 → 0 with `byte−12`; editor-only, can't panel-test |
 | 4 | **arp_enabled** | ✅ **CONFIRMED** — Arp On/Off flips only this byte (`00`↔`01`) |
-| 5 | **arp_mode** | ✅ **CONFIRMED** — observed Up=`0`, Exclusive=`3`; rest inferred from the editor's order (Up,Down,Inclusive,Exclusive,Order,Random) |
-| 6 | ? | ⬜ unmapped (base `05`) |
-| 7 | ? | ⬜ unmapped (`00`) |
-| 8 | ? | ⬜ unmapped (`00`) |
-| 9 | ? | ⬜ unmapped (`03`) |
+| 5 | **arp_mode** | ✅ **CONFIRMED** — Up=`0`, Exclusive=`3` observed. Codes follow the *editor* order (Up,Down,Inclusive,Exclusive,Order,Random), **not** the keybed label order (which prints excl before incl) |
+| 6 | **time_division** | ✅ **CONFIRMED** — hold-ARP + `1/8` key → `2`; standard order 1/4…1/32T = 0…7 |
+| 7 | arp_latch? | 🟡 editor-only (no keybed control) — `00` |
+| 8 | clock? | 🟡 editor-only (no keybed control) — `00` |
+| 9 | tempo_taps? | 🟡 editor-only — `03` (= default 3 taps) |
 | 10–11 | **tempo** | ✅ **CONFIRMED** — 14-bit `(idx10<<7)\|idx11`, range 30–240 (fast tap → idx10 `00`→`01`, value 226) |
-| 12 | ? | ⬜ unmapped (`00`) |
+| 12 | **arp_octave** | ✅ **CONFIRMED** — hold-ARP + `arp oct 3` key → `3`; direct 0–3 |
 
-> **Mapping status (2026-06-23):** confirmed by change-one-setting-and-diff on
-> real hardware: `octave` (idx 2), `arp_enabled` (idx 4), `arp_mode` (idx 5),
-> `tempo` (idx 10–11). Still to locate at idx 6/7/8/9/12: `arp_latch`,
-> `time_division`, `clock`, `tempo_taps`, `arp_octave`. `midi_channel` (idx 1)
-> and `transpose` (idx 3) are editor-only on the mk1 (no panel control), so they
-> stay hypotheses until checked via the write path + behavioural oracle. Raw
-> bytes are always exact regardless.
+> **Mapping status (2026-06-23):** every **panel-settable** parameter is now
+> confirmed by change-one-setting-and-diff on real hardware: `octave` (idx 2),
+> `arp_enabled` (idx 4), `arp_mode` (idx 5), `time_division` (idx 6),
+> `tempo` (idx 10–11), `arp_octave` (idx 12). The remaining bytes are all
+> **editor-only** (the mk1 keybed has no control for them): `midi_channel`
+> (idx 1), `transpose` (idx 3), and `arp_latch`/`clock`/`tempo_taps` (idx 7/8/9).
+> These will be confirmed via the write path + behavioural oracle (e.g. write a
+> channel, play a key, read the note-on channel back off `monitor`). Raw bytes
+> are always exact regardless.
+>
+> Hardware controls observed on the user's unit: keys labeled (after the time-
+> division keys) `up down excl incl order rand`, `arp oct 0..3`, `prog 1..4`;
+> plus 6 buttons: ARP ON/OFF, TAP TEMPO, SUSTAIN, PROGRAM, OCTAVE −/+.
 
 ### Read reliability (fixed 2026-06-22)
 

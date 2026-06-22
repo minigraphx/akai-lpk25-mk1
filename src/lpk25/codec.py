@@ -137,17 +137,25 @@ LPK25_MK1_FIELDS: list[Field] = [
     Field("transpose", index=3, kind="int", offset=-12, lo=-12, hi=12),
     # CONFIRMED (2026-06-22, real hardware): Arp On/Off toggles exactly this byte.
     Field("arp_enabled", index=4, kind="bool", verified=True),
-    # CONFIRMED (2026-06-22, real hardware): arp mode lives here (NOT idx 6 as the
-    # MK2-derived guess had it). Observed Up=0, Exclusive=3; rest inferred.
+    # CONFIRMED (2026-06-22/23, real hardware): arp mode lives here (NOT idx 6 as
+    # the MK2-derived guess had it). Up=0 and Exclusive=3 both observed via a
+    # precise hold-ARP+key gesture. GOTCHA: codes follow the *editor* order
+    # (Up,Down,Inclusive,Exclusive,Order,Random) NOT the keybed label order
+    # (which prints excl before incl) -- so Exclusive=3, Inclusive=2.
     Field("arp_mode", index=5, kind="enum", enum=ARP_MODES, verified=True),
+    # CONFIRMED (2026-06-23, real hardware): hold-ARP + a time-division key moves
+    # only this byte; "1/8" -> 2, matching the standard order in TIME_DIVISIONS.
+    Field("time_division", index=6, kind="enum", enum=TIME_DIVISIONS, verified=True),
     # CONFIRMED (2026-06-23, real hardware): tempo is a 14-bit value spanning
     # idx 10 (high) + idx 11 (low): bpm = (idx10<<7)|idx11. A fast tap pushed it
     # to (1<<7)|98 = 226 BPM, with idx 10 ticking 00->01. Range 30-240.
     Field("tempo", index=10, kind="u14", lo=30, hi=240, verified=True),
-    # idx 6, 7, 8, 9, 12 STILL UNMAPPED. Remaining params to locate (via
-    # hold-ARP+labeled-key, latch): arp_latch, time_division (TIME_DIVISIONS),
-    # clock (CLOCK_SOURCES), tempo_taps (2-4), arp_octave (0-3).
-    # Reference bytes at idx 6-9,12 in a base dump: 05 00 00 03 ... 00.
+    # CONFIRMED (2026-06-23, real hardware): hold-ARP + an arp-octave key moves
+    # only this trailing byte; "oct 3" -> 3. Direct 0-3 encoding.
+    Field("arp_octave", index=12, kind="int", offset=0, lo=0, hi=3, verified=True),
+    # idx 7, 8, 9 STILL UNMAPPED. Remaining params to locate (via latch button,
+    # hold-ARP+labeled-key): arp_latch, clock (CLOCK_SOURCES), tempo_taps (2-4).
+    # Reference bytes at idx 7,8,9 in a base dump: 00 00 03.
 ]
 
 

@@ -14,9 +14,10 @@ def test_decode_known_fields():
     assert values["transpose"] == 0  # byte 12 -> transpose 0
     assert values["arp_enabled"] is True
     assert values["arp_mode"] == "exclusive"  # code 3 at idx 5
-    # idx 6-12 are still unmapped, so no further fields are decoded
+    assert values["time_division"] == "1/16T"  # code 5 at idx 6
+    # idx 7, 8, 9, 12 are still unmapped, so those fields are not decoded
     assert "arp_latch" not in values
-    assert "time_division" not in values
+    assert "clock" not in values
 
 
 def test_encode_is_inverse_of_decode():
@@ -83,15 +84,15 @@ def test_diff_payloads_identical_is_empty():
 
 
 def test_diff_payloads_unmapped_and_length_change():
-    # 13-byte payload vs. one with the trailing (unmapped) idx 12 flipped + grown.
-    a = bytes.fromhex("0100050c000305000003001e00")       # 13 bytes
-    b = bytes.fromhex("0100050c000305000003001e0142")     # idx 12 changed, idx 13 added
+    # idx 7 is still unmapped; idx 13 is beyond the normal 13-byte payload.
+    a = bytes([1, 0, 4, 12, 1, 0, 2, 0, 0, 3, 1, 98, 3])           # 13 bytes
+    b = bytes([1, 0, 4, 12, 1, 0, 2, 9, 0, 3, 1, 98, 3, 0x42])     # idx7 changed, idx13 added
     changes = codec.diff_payloads(a, b)
     by_idx = {c.index: c for c in changes}
-    assert set(by_idx) == {12, 13}
-    assert by_idx[12].old == 0 and by_idx[12].new == 1
+    assert set(by_idx) == {7, 13}
+    assert by_idx[7].old == 0 and by_idx[7].new == 9
     assert by_idx[13].old is None and by_idx[13].new == 0x42
-    assert by_idx[12].field is None  # trailing byte is unmapped
+    assert by_idx[7].field is None  # idx 7 is unmapped
     assert by_idx[13].field is None
 
 
@@ -143,3 +144,25 @@ def test_diff_labels_both_tempo_bytes():
     b = bytes([1, 0, 4, 12, 1, 0, 5, 0, 0, 3, 1, 98, 0])
     changes = {c.index: c for c in codec.diff_payloads(a, b)}
     assert changes[10].field == "tempo" and changes[11].field == "tempo"
+
+
+def test_time_division_confirmed_idx6():
+    # Hardware (2026-06-23): hold-ARP + "1/8" key -> idx 6 = 2.
+    base = bytes([1, 0, 4, 12, 1, 0, 5, 0, 0, 3, 1, 98, 0])   # 1/16T
+    div8 = bytes([1, 0, 4, 12, 1, 0, 2, 0, 0, 3, 1, 98, 0])   # 1/8
+    assert codec.decode_program(base)["time_division"] == "1/16T"
+    assert codec.decode_program(div8)["time_division"] == "1/8"
+    changes = codec.diff_payloads(base, div8)
+    assert len(changes) == 1 and changes[0].index == 6
+    assert changes[0].field == "time_division"
+
+
+def test_arp_octave_confirmed_idx12():
+    # Hardware (2026-06-23): hold-ARP + "oct 3" key -> idx 12 = 3.
+    base = bytes([1, 0, 4, 12, 1, 0, 2, 0, 0, 3, 1, 98, 0])
+    oct3 = bytes([1, 0, 4, 12, 1, 0, 2, 0, 0, 3, 1, 98, 3])
+    assert codec.decode_program(base)["arp_octave"] == 0
+    assert codec.decode_program(oct3)["arp_octave"] == 3
+    changes = codec.diff_payloads(base, oct3)
+    assert len(changes) == 1 and changes[0].index == 12
+    assert changes[0].field == "arp_octave"
