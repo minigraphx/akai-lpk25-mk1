@@ -47,7 +47,16 @@ lpk25 load my-presets.json  # write all programs
 lpk25 backup                # timestamped backup into ./backups/
 lpk25 restore backups/lpk25-backup-XX…json
 lpk25 monitor               # print live MIDI as you play (behavioural oracle)
+lpk25 edit <slot> [--channel N --octave N --transpose N --arp on/off
+                   --arp-mode M --time-div D --clock int/ext --latch on/off
+                   --tempo N --taps N --arp-octave N]   change fields on a slot
+lpk25 show [slot] [--json]                              human-readable state
+lpk25 preset save <name> [--from-slot N] [--force]      save a slot as a preset
+lpk25 preset apply <name> <slot>                        write a preset onto a slot
+lpk25 preset list                                       list saved presets
 ```
+
+Presets live in `$LPK25_PRESET_DIR` (default `~/.config/lpk25/presets`).
 
 Try the CLI with no hardware using the built-in fake device:
 
