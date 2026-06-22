@@ -112,3 +112,31 @@ def test_preset_list(tmp_path, monkeypatch, capsys):
     capsys.readouterr()  # clear
     assert run(["--mock", "preset", "list"], tr) == 0
     assert "alpha" in capsys.readouterr().out
+
+
+def test_preset_save_duplicate_prints_already_exists(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("LPK25_PRESET_DIR", str(tmp_path))
+    tr = MockTransport()
+    assert run(["--mock", "preset", "save", "dup2", "--from-slot", "1"], tr) == 0
+    capsys.readouterr()  # clear
+    rc = run(["--mock", "preset", "save", "dup2", "--from-slot", "1"], tr)
+    assert rc != 0
+    assert "already exists" in capsys.readouterr().err
+
+
+def test_preset_apply_missing_prints_not_found(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("LPK25_PRESET_DIR", str(tmp_path))
+    tr = MockTransport()
+    capsys.readouterr()  # clear
+    rc = run(["--mock", "preset", "apply", "nosuchpreset", "1"], tr)
+    assert rc != 0
+    assert "not found" in capsys.readouterr().err
+
+
+def test_preset_list_empty(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("LPK25_PRESET_DIR", str(tmp_path))
+    tr = MockTransport()
+    capsys.readouterr()  # clear
+    rc = run(["--mock", "preset", "list"], tr)
+    assert rc == 0
+    assert "(no presets)" in capsys.readouterr().out

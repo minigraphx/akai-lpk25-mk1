@@ -294,22 +294,26 @@ def cmd_preset(args: argparse.Namespace) -> int:
                   f"arp={'on' if v['arp_enabled'] else 'off'} tempo{v['tempo']}")
         return 0
 
-    if args.preset_action == "save":
-        dev = _make_device(args)
-        prog = dev.get_program(args.from_slot)
-        path = library.save_preset(args.name, prog, force=args.force)
-        print(f"Saved preset {args.name} to {path}")
-        return 0
+    try:
+        if args.preset_action == "save":
+            dev = _make_device(args)
+            prog = dev.get_program(args.from_slot)
+            path = library.save_preset(args.name, prog, force=args.force)
+            print(f"Saved preset {args.name} to {path}")
+            return 0
 
-    if args.preset_action == "apply":
-        prog = library.load_preset(args.name)
-        # correct the slot-echo byte so read-back verify matches the target slot
-        fixed = Program.from_payload(args.slot, bytes([args.slot]) + prog.raw[1:])
-        dev = _make_device(args)
-        result = dev.send_program(fixed, verify=not args.no_verify)
-        print(f"Applied preset {args.name} to slot {result.slot}; "
-              f"verified={result.verified}")
-        return 0
+        if args.preset_action == "apply":
+            prog = library.load_preset(args.name)
+            # correct the slot-echo byte so read-back verify matches the target slot
+            fixed = Program.from_payload(args.slot, bytes([args.slot]) + prog.raw[1:])
+            dev = _make_device(args)
+            result = dev.send_program(fixed, verify=not args.no_verify)
+            print(f"Applied preset {args.name} to slot {result.slot}; "
+                  f"verified={result.verified}")
+            return 0
+    except library.LibraryError as exc:
+        _eprint(f"error: {exc}")
+        return 1
 
     _eprint("unknown preset action")
     return 2
