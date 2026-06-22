@@ -64,3 +64,24 @@ def test_list_presets(tmp_path):
 
 def test_list_names_missing_dir_is_empty(tmp_path):
     assert library.list_preset_names(directory=str(tmp_path / "nope")) == []
+
+
+def test_save_rejects_path_separator(tmp_path):
+    d = str(tmp_path)
+    with pytest.raises(library.LibraryError):
+        library.save_preset("../escape", prog(1), directory=d)
+    with pytest.raises(library.LibraryError):
+        library.save_preset("a/b", prog(1), directory=d)
+
+
+def test_list_skips_corrupt_file(tmp_path):
+    d = str(tmp_path)
+    library.save_preset("good", prog(1), directory=d)
+    (tmp_path / "bad.json").write_text("{ not json")
+    names = library.list_preset_names(directory=d)
+    assert "good" in names
+    assert "bad" in names
+    pairs = library.list_presets(directory=d)
+    assert [n for n, _ in pairs] == ["good"]
+    with pytest.raises(library.LibraryError):
+        library.load_preset("bad", directory=d)

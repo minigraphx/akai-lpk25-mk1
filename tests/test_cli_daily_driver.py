@@ -140,3 +140,10 @@ def test_preset_list_empty(tmp_path, monkeypatch, capsys):
     rc = run(["--mock", "preset", "list"], tr)
     assert rc == 0
     assert "(no presets)" in capsys.readouterr().out
+
+
+def test_edit_bool_off():
+    tr = MockTransport()
+    run(["--mock", "edit", "1", "--arp", "on"], tr)
+    run(["--mock", "edit", "1", "--arp", "off"], tr)
+    assert codec.decode_program(tr.programs[1])["arp_enabled"] is False

@@ -7,6 +7,7 @@ operations with no device dependency.
 
 from __future__ import annotations
 
+import json
 import os
 
 from .model import Preset, Program
@@ -31,7 +32,15 @@ def preset_dir() -> str:
     return os.path.join(base, "lpk25", "presets")
 
 
+def _validate_name(name: str) -> None:
+    if not name or name in (".", "..") or os.path.basename(name) != name:
+        raise LibraryError(
+            f"invalid preset name {name!r} (must be a bare name, no path separators)"
+        )
+
+
 def _path(name: str, directory: str | None) -> str:
+    _validate_name(name)
     return os.path.join(directory or preset_dir(), f"{name}.json")
 
 
@@ -55,7 +64,10 @@ def load_preset(name: str, directory: str | None = None) -> Program:
     if not os.path.exists(path):
         avail = ", ".join(list_preset_names(directory)) or "(none)"
         raise LibraryError(f"preset {name!r} not found. Available: {avail}")
-    preset = Preset.load(path)
+    try:
+        preset = Preset.load(path)
+    except (json.JSONDecodeError, OSError, ValueError) as exc:
+        raise LibraryError(f"preset {name!r} is unreadable: {exc}") from exc
     if not preset.programs:
         raise LibraryError(f"preset {name!r} contains no program")
     return preset.programs[0]
