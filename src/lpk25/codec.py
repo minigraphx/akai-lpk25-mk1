@@ -131,12 +131,13 @@ LPK25_MK1_FIELDS: list[Field] = [
     # played keys, and every note-on transmitted on channel 10 (status 0x99).
     # Encoding: value = byte + 1 (byte 0 -> channel 1).
     Field("midi_channel", index=1, kind="int", offset=1, lo=1, hi=16, verified=True),
-    # idx 3 transpose: editor-only (no panel control); hypothesis 0x0c=12 ->
-    # transpose 0 (centred at 12), to confirm via the write path + note numbers.
+    # CONFIRMED (2026-06-23, real hardware): wrote transpose +12 (byte 24) to
+    # slot 1; played keys all shifted up 12 semitones (48,60,72,84 -> 60,72,84,
+    # 96). Encoding: value = byte - 12 (byte 12 -> 0), centred like octave.
     # CONFIRMED (2026-06-22, real hardware): octave up/down moves only this byte;
     # value = byte - 4 (byte 0x00 = -4, 0x04 = 0, 0x08 = +4; clamps, no wrap).
     Field("keybed_octave", index=2, kind="int", offset=-4, lo=-4, hi=4, verified=True),
-    Field("transpose", index=3, kind="int", offset=-12, lo=-12, hi=12),
+    Field("transpose", index=3, kind="int", offset=-12, lo=-12, hi=12, verified=True),
     # CONFIRMED (2026-06-22, real hardware): Arp On/Off toggles exactly this byte.
     Field("arp_enabled", index=4, kind="bool", verified=True),
     # CONFIRMED (2026-06-22/23, real hardware): arp mode lives here (NOT idx 6 as

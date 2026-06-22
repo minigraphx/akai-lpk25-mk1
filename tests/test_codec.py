@@ -174,3 +174,13 @@ def test_midi_channel_confirmed_idx1():
     assert codec.decode_program(ch10)["midi_channel"] == 10
     assert codec.encode_program({"midi_channel": 10}, bytes(13))[1] == 9
     assert codec.encode_program({"midi_channel": 1}, bytes(13))[1] == 0
+
+
+def test_transpose_confirmed_idx3():
+    # Hardware (2026-06-23): wrote +12 (byte 24); notes shifted up 12 semitones.
+    p12 = bytes([1, 0, 4, 24, 0, 0, 5, 0, 0, 3, 0, 120, 0])
+    m12 = bytes([1, 0, 4, 0, 0, 0, 5, 0, 0, 3, 0, 120, 0])
+    assert codec.decode_program(p12)["transpose"] == 12
+    assert codec.decode_program(m12)["transpose"] == -12
+    assert codec.encode_program({"transpose": 12}, bytes(13))[3] == 24
+    assert codec.encode_program({"transpose": 0}, bytes(13))[3] == 12
