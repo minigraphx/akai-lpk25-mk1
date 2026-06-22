@@ -16,18 +16,30 @@ F0 47 7F <model> <op> <len_hi> <len_lo> [data...] F7
 |---------|---------|
 | `F0` / `F7` | SysEx start / end |
 | `47` | Akai manufacturer id ✅ |
-| `7F` | broadcast device id 🟡 |
-| `<model>` | product model byte — **unknown for LPK25 mk1** 🟡 |
+| `7F` | broadcast device id ✅ (device answers a `F0 47 7F 76 …` frame) |
+| `<model>` | product model byte — **`0x76` for LPK25 mk1** ✅ |
 | `<op>` | opcode |
 | `<len_hi> <len_lo>` | payload length, 16-bit big-endian as two 7-bit bytes: `(hi<<7)|lo` 🟡 |
 | `data` | opcode-specific payload (7-bit bytes) |
 
-### Confirmed device facts (official MIDI Implementation Chart)
+> **Framing confirmed ✅ (2026-06-22, real LPK25 mk1).** `lpk25 identify` got a
+> get-active-program reply that parses back as a frame with model `0x76`, so the
+> manufacturer (`47`), broadcast device id (`7F`), model (`76`) and opcode `0x64`
+> all round-trip on hardware. Length encoding still to be cross-checked against a
+> real program dump.
+
+### Confirmed device facts
 
 - Manufacturer: **Akai Professional**; Model: **LPK25**; Version **1.0**; 2009-05-15. ✅
 - Manufacturer / non-commercial **System Exclusive: Yes** (transmit + recognize). ✅
-- **Device Inquiry: No** ❌ — the device does *not* answer `F0 7E 7F 06 01 F7`,
-  so the model byte must be found by **probing**, not inquiry.
+- **Device Inquiry: YES** ✅ — *contradicts the MIDI Implementation Chart, which
+  lists it as No.* Real hardware answers `F0 7E 7F 06 01 F7` with:
+  - manufacturer `0x47` (Akai), family LSB **`0x76`** / MSB `0x00`, member **`25`**
+    (`0x19`, = the key count).
+  - a non-standard **24-byte** version tail (`00 00 66 00 …`), not the usual 4
+    bytes; recorded raw, meaning TBD.
+  - **The family LSB equals the model byte**, giving a second, independent
+    confirmation of `0x76`.
 - MIDI Clock: *recognized* (external sync) but not transmitted; Program Change /
   Bank Select / Pitch Bend / Aftertouch / NRPN / RPN: none.
 - Number of presets: **4**; MIDI channels 1–16. ✅
@@ -35,9 +47,10 @@ F0 47 7F <model> <op> <len_hi> <len_lo> [data...] F7
 ### Model byte
 
 - LPD8 mk1 = `0x75` ✅ (from `lpd8editor`).
-- LPK25 mk1 = **unknown**. Provisional guess `0x76`; candidates probed:
-  `0x76 0x77 0x74 0x73 0x78 0x79 0x72 0x7A 0x75`. Found via `probe_models`
-  (send get-active/get-program per candidate, watch for a matching reply).
+- LPK25 mk1 = **`0x76`** ✅ — confirmed twice on real hardware: the Device
+  Inquiry reply's family LSB is `0x76`, **and** of the probed candidates
+  (`0x76 0x77 0x74 0x73 0x78 0x79 0x72 0x7A 0x75`) only `0x76` answered a
+  get-active-program request (`probe_models`); all others were silent.
 
 ## Opcodes (🟡, consistent across the family)
 
@@ -67,33 +80,43 @@ LPK25-specific. The official editor exposes these parameters:
 | Time division | 1/4 … 1/32T (8 values) |
 | Arp octave | 1 / 2 / 3 / 4 |
 
-### Provisional byte map (`src/lpk25/codec.py`)
+### Byte map (`src/lpk25/codec.py`)
 
-`data[0]` is the slot echo. Indices below are into the data payload. **All
-unverified** — ordering borrowed from the MK2 (minus swing):
+`data[0]` is the slot echo. **Payload length = 13 bytes (idx 0–12), confirmed**
+from the first real dump (2026-06-22). Sample dump — program 1, octave +1, arp
+off:
 
-| idx | field | encoding |
-|-----|-------|----------|
-| 0 | slot echo | 1–4 |
-| 1 | midi_channel | byte+1 → 1–16 |
-| 2 | keybed_octave | TBD (offset vs two's-complement) |
-| 3 | transpose | TBD |
-| 4 | arp_enabled | 0/1 |
-| 5 | arp_latch | 0/1 |
-| 6 | arp_mode | enum 0–5 |
-| 7 | time_division | enum 0–7 |
-| 8 | clock | 0/1 |
-| 9 | tempo_taps | 2–4 |
-| 10 | tempo | TBD (likely 2 bytes; 30–240 > 7 bits) |
-| 11 | arp_octave | 0–3 (confirmed range) |
+```
+01 00 05 0c 00 03 05 00 00 03 00 1e 00
+ 0  1  2  3  4  5  6  7  8  9 10 11 12
+```
 
-The true payload length comes from the first real dump's `<len>` field.
+| idx | field | status |
+|-----|-------|--------|
+| 0 | slot echo | ✅ 1–4 (here `01`) |
+| 1 | midi_channel? | 🟡 `00`; `byte+1`→ch 1 plausible |
+| 2 | keybed_octave? | 🟡 `05`; fits octave +1 (octave-up was pressed) |
+| 3 | transpose? | 🟡 `0c`=12; fits transpose centred at 0 |
+| 4 | **arp_enabled** | ✅ **CONFIRMED** — toggling Arp On/Off flips only this byte (`00`↔`01`) |
+| 5–11 | (MK2-derived guesses) | ❌ **MISALIGNED** — decode to nonsense on real dumps; ordering wrong past idx 4 |
+| 12 | unmapped | 🟡 `00` |
+
+> **Important:** the old MK2-derived ordering for idx 5–11 is now known to be
+> wrong (it decodes real dumps to e.g. tempo=0, arp_octave=30). Treat all decoded
+> values except `slot` and `arp_enabled` as untrusted until each is confirmed
+> one-at-a-time. Raw bytes are always exact.
+
+### Read reliability (fixed 2026-06-22)
+
+The first `get` after powering on / touching the keyboard could fail with
+`frame too short (3 bytes)` — a stray Channel message (sustain CC, active
+sensing) was being read instead of the SysEx reply. `MidoTransport.request`
+now skips non-`F0…F7` traffic until the real reply arrives or it times out.
 
 ## How we confirm each item (no official editor available)
 
-1. **Identify** — `lpk25 identify`. Device Inquiry won't answer (see above), so
-   this is really the **model probe**: confirms the model byte and that the
-   framing is right (we get *a* reply).
+1. **Identify** — `lpk25 identify`. Device Inquiry *does* answer (family LSB =
+   model byte `0x76`) and the model probe agrees; confirms model + framing.
 2. **Round-trip integrity** — read a program, send the same bytes back, read
    again; identical ⇒ framing + read + write are correct, independent of field
    meanings.

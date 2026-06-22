@@ -40,10 +40,14 @@ OP_GET_ACTIVE_PROGRAM = 0x64
 # Known model bytes in this generation.
 MODEL_LPD8_MK1 = 0x75
 
-# The LPK25 mk1 model byte is unknown. 0x76 is a provisional best guess (LPD8 is
-# 0x75 and Akai assigned adjacent ids in this generation); the Universal Device
-# Inquiry should reveal the real value. Probe these candidates if unsure.
-PROVISIONAL_MODEL_LPK25_MK1 = 0x76
+# LPK25 mk1 model byte = 0x76, CONFIRMED against real hardware two independent
+# ways: (1) the Universal Device Inquiry reply reports family LSB 0x76 (118), and
+# (2) only 0x76 answers a get-active-program probe; every other candidate is
+# silent. The get-active-program reply also parses back with model == 0x76, so
+# the whole frame (47 / 7F / 76 / opcode / length) round-trips on the device.
+MODEL_LPK25_MK1 = 0x76
+# Backwards-compatible alias (the value is no longer provisional).
+PROVISIONAL_MODEL_LPK25_MK1 = MODEL_LPK25_MK1
 MK1_MODEL_CANDIDATES: list[int] = [0x76, 0x77, 0x74, 0x73, 0x78, 0x79, 0x72, 0x7A, 0x75]
 
 
@@ -55,7 +59,7 @@ class ProtocolError(ValueError):
 class ProtocolConfig:
     """Adjustable protocol parameters. Tweak ``model`` once discovery confirms it."""
 
-    model: int = PROVISIONAL_MODEL_LPK25_MK1
+    model: int = MODEL_LPK25_MK1
     manufacturer: int = MANUFACTURER_AKAI
     device: int = DEVICE_BROADCAST
 

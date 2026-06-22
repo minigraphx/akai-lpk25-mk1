@@ -96,22 +96,34 @@ class Field:
         buf[self.index] = byte
 
 
-# Provisional LPK25 mk1 program field map. data[0] is the slot echo, handled
-# separately by the model layer. Tempo (30-240) cannot fit in one 7-bit byte, so
-# it is very likely 2 bytes on the device; treated as provisional/1-byte here and
-# preserved in raw until confirmed.
+# LPK25 mk1 program field map. data[0] is the slot echo, handled separately by
+# the model layer. The real payload is 13 bytes (idx 0-12), confirmed from a
+# hardware dump on 2026-06-22; a sample (program 1, octave +1, arp off) is:
+#   01 00 05 0c 00 03 05 00 00 03 00 1e 00
+#    0  1  2  3  4  5  6  7  8  9 10 11 12
+#
+# CONFIRMED so far: idx 0 = slot echo; idx 4 = arp on/off (toggling it flipped
+# only this byte 00<->01). Everything from idx 5 on is still PROVISIONAL and the
+# old MK2-derived ordering below is known to be MISALIGNED past idx 4 (it decodes
+# real dumps to nonsense, e.g. tempo=0, arp_octave=30). Those fields stay
+# verified=False and decoded values must not be trusted until each is confirmed
+# one-at-a-time via the change-one-byte-and-diff method. idx 12 is unmapped.
 LPK25_MK1_FIELDS: list[Field] = [
+    # idx 2 = 05 fits "octave +1" (you'd pressed octave-up); idx 3 = 0x0c = 12
+    # fits transpose centred at 0. Plausible but UNCONFIRMED (no clean baseline).
     Field("midi_channel", index=1, kind="int", offset=1, lo=1, hi=16),
     Field("keybed_octave", index=2, kind="int", offset=0, lo=-4, hi=4),
     Field("transpose", index=3, kind="int", offset=0, lo=-12, hi=12),
-    Field("arp_enabled", index=4, kind="bool"),
+    # CONFIRMED (2026-06-22, real hardware): Arp On/Off toggles exactly this byte.
+    Field("arp_enabled", index=4, kind="bool", verified=True),
+    # --- everything below is MISALIGNED/unconfirmed; do not trust decoded values.
     Field("arp_latch", index=5, kind="bool"),
     Field("arp_mode", index=6, kind="enum", enum=ARP_MODES),
     Field("time_division", index=7, kind="enum", enum=TIME_DIVISIONS),
     Field("clock", index=8, kind="enum", enum=CLOCK_SOURCES),
     Field("tempo_taps", index=9, kind="int", offset=0, lo=2, hi=4),
     Field("tempo", index=10, kind="int", offset=0, lo=30, hi=240),
-    # Arp octave is 0-3 (confirmed: hardware labels ARP OCT 0-3 and editor guide).
+    # Arp octave is 0-3 (hardware labels ARP OCT 0-3 and editor guide).
     Field("arp_octave", index=11, kind="int", offset=0, lo=0, hi=3),
 ]
 

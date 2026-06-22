@@ -21,10 +21,11 @@ class ProbeResult:
 def identify(transport: Transport, timeout: float = 1.0) -> protocol.IdentityReply | None:
     """Send a Universal Device Inquiry and parse the reply, if any.
 
-    NOTE: the LPK25 mk1's MIDI Implementation Chart lists Device Inquiry as
-    *not supported*, so this will most likely return None on real hardware.
-    Model-byte discovery therefore relies on :func:`probe_models`. We still try
-    the inquiry first in case some firmware revision answers it.
+    NOTE: despite the official MIDI Implementation Chart listing Device Inquiry
+    as *not supported*, real hardware DOES answer it: the reply reports
+    manufacturer Akai (0x47), family LSB 0x76 (the model byte), and member 25
+    (the key count). It is therefore the primary model-byte discovery path, with
+    :func:`probe_models` as confirmation. Returns None only if no reply arrives.
     """
     reply = transport.request(protocol.IDENTITY_REQUEST, timeout=timeout)
     if reply is None:
@@ -59,9 +60,11 @@ def probe_models(
 
 
 def detect_model(transport: Transport) -> int | None:
-    """Best-effort single model byte. The mk1 does not support Device Inquiry,
-    so this is driven by probing; the inquiry is only a courtesy attempt."""
-    identify(transport)  # courtesy; the mk1 is not expected to reply
+    """Best-effort single model byte. Prefer the Device Inquiry (real hardware
+    answers it, reporting family LSB == model byte); fall back to probing."""
+    ident = identify(transport)
+    if ident is not None and 0 <= ident.family <= 0x7F:
+        return ident.family
     for r in probe_models(transport):
         if r.responded:
             return r.model

@@ -104,14 +104,29 @@ class MidoTransport(Transport):
             msg = self._mido.Message.from_bytes(list(frame))
         self._out.send(msg)
 
-    def receive(self, timeout: float = 1.0) -> bytes | None:
+    def receive(self, timeout: float = 1.0, sysex_only: bool = False) -> bytes | None:
+        """Return the next incoming message, or None on timeout.
+
+        With ``sysex_only`` set, skip any non-SysEx traffic (Channel Voice such
+        as a sustain-pedal CC, Active Sensing, Clock, etc.) and keep waiting for
+        an ``F0 .. F7`` frame until the timeout. This keeps a program read from
+        being hijacked by stray 3-byte messages the keyboard happens to emit.
+        """
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             msg = self._in.poll()
             if msg is not None:
-                return bytes(msg.bytes())
-            time.sleep(0.002)
+                data = bytes(msg.bytes())
+                if not sysex_only or (data and data[0] == 0xF0):
+                    return data
+            else:
+                time.sleep(0.002)
         return None
+
+    def request(self, frame: bytes, timeout: float = 1.0) -> bytes | None:
+        """Send a frame and wait for the SysEx reply, ignoring stray messages."""
+        self.send(frame)
+        return self.receive(timeout=timeout, sysex_only=True)
 
     def monitor(self, callback: Callable[[bytes], None], duration: float | None = None) -> None:
         """Stream incoming messages to ``callback`` until ``duration`` elapses

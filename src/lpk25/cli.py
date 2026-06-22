@@ -65,8 +65,10 @@ def cmd_identify(args: argparse.Namespace) -> int:
             print(f"  family:       {ident.family}")
             print(f"  member:       {ident.member}")
             print(f"  version:      {ident.version.hex(' ') if ident.version else '(none)'}")
+            if 0 <= ident.family <= 0x7F:
+                print(f"  -> model byte (family LSB): 0x{ident.family:02X}")
         else:
-            print("No Device Inquiry reply (the mk1 may not implement it).")
+            print("No Device Inquiry reply.")
 
         print("\nProbing candidate model bytes (read-only)...")
         any_ok = False
