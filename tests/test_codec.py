@@ -15,7 +15,7 @@ def test_decode_known_fields():
     assert values["time_division"] == "1/16"  # code 4
     assert values["clock"] == "external"  # code 1
     assert values["tempo_taps"] == 3
-    assert values["arp_octave"] == 3  # byte 2 -> octave 3
+    assert values["arp_octave"] == 2  # byte 2 -> 2 (arp octave range is 0-3)
 
 
 def test_encode_is_inverse_of_decode():

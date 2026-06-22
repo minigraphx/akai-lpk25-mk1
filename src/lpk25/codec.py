@@ -111,7 +111,8 @@ LPK25_MK1_FIELDS: list[Field] = [
     Field("clock", index=8, kind="enum", enum=CLOCK_SOURCES),
     Field("tempo_taps", index=9, kind="int", offset=0, lo=2, hi=4),
     Field("tempo", index=10, kind="int", offset=0, lo=30, hi=240),
-    Field("arp_octave", index=11, kind="int", offset=1, lo=1, hi=4),
+    # Arp octave is 0-3 (confirmed: hardware labels ARP OCT 0-3 and editor guide).
+    Field("arp_octave", index=11, kind="int", offset=0, lo=0, hi=3),
 ]
 
 

@@ -21,7 +21,10 @@ class ProbeResult:
 def identify(transport: Transport, timeout: float = 1.0) -> protocol.IdentityReply | None:
     """Send a Universal Device Inquiry and parse the reply, if any.
 
-    This is the safest, most reliable way to learn the LPK25 mk1's model byte.
+    NOTE: the LPK25 mk1's MIDI Implementation Chart lists Device Inquiry as
+    *not supported*, so this will most likely return None on real hardware.
+    Model-byte discovery therefore relies on :func:`probe_models`. We still try
+    the inquiry first in case some firmware revision answers it.
     """
     reply = transport.request(protocol.IDENTITY_REQUEST, timeout=timeout)
     if reply is None:
@@ -56,12 +59,9 @@ def probe_models(
 
 
 def detect_model(transport: Transport) -> int | None:
-    """Best-effort single model byte: prefer device inquiry, fall back to probing."""
-    ident = identify(transport)
-    if ident is not None and ident.member >= 0:
-        # The inquiry's member id is not necessarily the SysEx model byte, so
-        # confirm by probing; fall through if it doesn't match.
-        pass
+    """Best-effort single model byte. The mk1 does not support Device Inquiry,
+    so this is driven by probing; the inquiry is only a courtesy attempt."""
+    identify(transport)  # courtesy; the mk1 is not expected to reply
     for r in probe_models(transport):
         if r.responded:
             return r.model
