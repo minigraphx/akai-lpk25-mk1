@@ -164,3 +164,38 @@ def encode_program(
 def all_verified(fields: list[Field] | None = None) -> bool:
     fields = fields if fields is not None else LPK25_MK1_FIELDS
     return all(f.verified for f in fields)
+
+
+@dataclass
+class ByteChange:
+    """One differing byte between two program payloads.
+
+    ``old``/``new`` are the byte values (or ``None`` if that payload is shorter
+    than ``index``). ``field``/``verified`` describe the mapped field, if any.
+    """
+
+    index: int
+    old: int | None
+    new: int | None
+    field: str | None = None
+    verified: bool = False
+
+
+def diff_payloads(
+    a: bytes, b: bytes, fields: list[Field] | None = None
+) -> list[ByteChange]:
+    """Return the byte positions where two program payloads differ, annotated
+    with the mapped field name (if known). The core of the ``lpk25 diff`` tool
+    used to map fields by changing one device setting at a time."""
+    fields = fields if fields is not None else LPK25_MK1_FIELDS
+    by_index = {f.index: f for f in fields}
+    changes: list[ByteChange] = []
+    for i in range(max(len(a), len(b))):
+        av = a[i] if i < len(a) else None
+        bv = b[i] if i < len(b) else None
+        if av != bv:
+            f = by_index.get(i)
+            changes.append(
+                ByteChange(i, av, bv, f.name if f else None, bool(f and f.verified))
+            )
+    return changes

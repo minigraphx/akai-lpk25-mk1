@@ -62,3 +62,33 @@ def test_short_payload_skips_missing_fields():
     values = codec.decode_program(bytes([1, 0, 4]))  # only 3 bytes
     assert "midi_channel" in values
     assert "tempo" not in values
+
+
+def test_diff_payloads_detects_changed_byte():
+    # The real captures: arp toggled on (idx 4: 00 -> 01), nothing else.
+    a = bytes.fromhex("0100050c000305000003001e00")
+    b = bytes.fromhex("0100050c010305000003001e00")
+    changes = codec.diff_payloads(a, b)
+    assert len(changes) == 1
+    c = changes[0]
+    assert (c.index, c.old, c.new) == (4, 0, 1)
+    assert c.field == "arp_enabled"
+    assert c.verified is True
+
+
+def test_diff_payloads_identical_is_empty():
+    p = bytes.fromhex("0100050c000305000003001e00")
+    assert codec.diff_payloads(p, p) == []
+
+
+def test_diff_payloads_unmapped_and_length_change():
+    # 13-byte payload vs. one with the trailing (unmapped) idx 12 flipped + grown.
+    a = bytes.fromhex("0100050c000305000003001e00")       # 13 bytes
+    b = bytes.fromhex("0100050c000305000003001e0142")     # idx 12 changed, idx 13 added
+    changes = codec.diff_payloads(a, b)
+    by_idx = {c.index: c for c in changes}
+    assert set(by_idx) == {12, 13}
+    assert by_idx[12].old == 0 and by_idx[12].new == 1
+    assert by_idx[13].old is None and by_idx[13].new == 0x42
+    assert by_idx[12].field is None  # trailing byte is unmapped
+    assert by_idx[13].field is None

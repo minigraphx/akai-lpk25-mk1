@@ -136,3 +136,11 @@ now skips non-`F0…F7` traffic until the real reply arrives or it times out.
 - LPD8 mk1 protocol: `charlesfleche/lpd8editor` `doc/SYSEX.md`.
 - LPK25 MK2 protocol: `denizegememetoglu/lpk25-linux` `docs/protocol.md`.
 - LPK25 mk1 parameter list: official *LPK25 Editor User Guide* (Akai).
+
+### Evaluated, no protocol info (don't re-check)
+
+`ahuertam/akai25`, `bencevans/lpk25-console`, `bencevans/lpk25.js` are all
+note-input / Web-MIDI *playing* apps — none read or write the editor SysEx
+protocol (`akai25` even opens MIDI with `{ sysex: false }`). They only consume
+the keyboard's Note On/Off output, which is the behavioural-oracle side we
+already handle. See `docs/discovery-checklist.md` for the field-mapping plan.

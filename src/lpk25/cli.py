@@ -181,6 +181,39 @@ def cmd_set(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_diff(args: argparse.Namespace) -> int:
+    """Compare two dump/get JSON files byte-by-byte (offline, no device).
+
+    The field-mapping workhorse: dump a baseline, change ONE setting on the
+    device, dump again, and `diff` to see exactly which byte moved."""
+    a = Preset.load(args.a)
+    b = Preset.load(args.b)
+    a_by_slot = {p.slot: p for p in a.programs}
+    b_by_slot = {p.slot: p for p in b.programs}
+    common = sorted(set(a_by_slot) & set(b_by_slot))
+    if not common:
+        _eprint("no slots in common between the two files")
+        return 2
+    total = 0
+    for slot in common:
+        changes = codec.diff_payloads(a_by_slot[slot].raw, b_by_slot[slot].raw)
+        if not changes:
+            print(f"slot {slot}: identical ({len(a_by_slot[slot].raw)} bytes)")
+            continue
+        total += len(changes)
+        print(f"slot {slot}: {len(changes)} byte(s) changed")
+        for c in changes:
+            old = "--" if c.old is None else f"0x{c.old:02X} ({c.old})"
+            new = "--" if c.new is None else f"0x{c.new:02X} ({c.new})"
+            label = c.field or "unmapped"
+            mark = "confirmed" if c.verified else "unverified"
+            print(f"  idx {c.index:2d}: {old} -> {new}   {label} [{mark}]")
+    if total == 0:
+        print("\nNo differences — the change may not have persisted to the program "
+              "(try reselecting the program with the Prog button before re-reading).")
+    return 0
+
+
 def cmd_load(args: argparse.Namespace) -> int:
     preset = Preset.load(args.file)
     dev = _make_device(args)
@@ -273,6 +306,11 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("slot", type=int, choices=(1, 2, 3, 4))
     g.add_argument("-o", "--output", default=None)
     g.set_defaults(func=cmd_get)
+
+    df = sub.add_parser("diff", help="compare two dump/get JSON files (offline)")
+    df.add_argument("a", help="baseline JSON file")
+    df.add_argument("b", help="changed JSON file")
+    df.set_defaults(func=cmd_diff)
 
     s = sub.add_parser("set", help="write one program from a JSON file")
     s.add_argument("slot", type=int, choices=(1, 2, 3, 4))
