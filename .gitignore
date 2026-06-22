@@ -20,6 +20,13 @@ htmlcov/
 .vscode/
 .idea/
 .DS_Store
+*.swp
+
+# Secrets — never commit SSH keys or credentials
+.ssh/
+id_ed25519*
+id_rsa*
+*.pem
 
 # Device data captured locally (don't commit personal presets/backups)
 *.syx
