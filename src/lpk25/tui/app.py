@@ -120,3 +120,49 @@ def dispatch(key: int, controller, ui: UIState, io) -> str | None:
         if not controller.any_dirty() or io.confirm("unsaved edits — quit anyway?"):
             ui.running = False
     return None
+
+
+from .controller import EditorController          # noqa: E402,I001
+from .monitor import MidiMonitor                  # noqa: E402
+from . import view as _view                       # noqa: E402
+
+
+class _CursesIO:
+    def __init__(self, stdscr):
+        self._stdscr = stdscr
+
+    def prompt(self, label):
+        return _view.prompt(self._stdscr, label)
+
+    def choose(self, title, options):
+        return _view.choose(self._stdscr, title, list(options))
+
+    def confirm(self, msg):
+        return _view.confirm(self._stdscr, msg)
+
+
+def _loop(stdscr, controller, monitor, mock):
+    curses.curs_set(0)
+    stdscr.keypad(True)
+    ui = UIState()
+    io = _CursesIO(stdscr)
+    message = "ready"
+    while ui.running:
+        _view.draw(stdscr, controller, monitor, ui, mock, message)
+        key = stdscr.getch()
+        message = dispatch(key, controller, ui, io) or message
+
+
+def run(transport, mock: bool) -> int:
+    from ..device import Device
+
+    dev = Device(transport)
+    controller = EditorController(dev, dev.dump(), dev.get_active_program())
+    monitor = MidiMonitor(transport)
+    if not mock:
+        monitor.start()
+    try:
+        curses.wrapper(_loop, controller, monitor, mock)
+    finally:
+        monitor.stop()
+    return 0
