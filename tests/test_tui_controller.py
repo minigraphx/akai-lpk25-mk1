@@ -121,3 +121,43 @@ def test_edits_keep_raw_consistent_for_library_save():
     _focus(c, "tempo")
     c.set_value("150")
     assert codec.decode_program(c._edited[0].raw)["tempo"] == 150
+
+
+def test_write_current_persists_and_clears_dirty():
+    c = make_controller()
+    _focus(c, "keybed_octave")
+    c.step(1)
+    assert c.rows()[0].dirty is True
+    result = c.write_current()
+    assert result.slot == 1 and result.verified is True
+    assert c.rows()[0].dirty is False
+    # the mock device now holds the new value
+    assert c.dev.get_program(1).values["keybed_octave"] == 1
+
+
+def test_write_all_dirty_writes_only_changed_slots():
+    c = make_controller()
+    _focus(c, "keybed_octave")
+    c.step(1)                                   # slot 1 dirty
+    c.move(2, 0)                                # to slot 3
+    c.step(-1)                                  # slot 3 dirty
+    results = c.write_all_dirty()
+    assert sorted(r.slot for r in results) == [1, 3]
+    assert c.any_dirty() is False
+
+
+def test_activate_current_changes_active():
+    c = make_controller()
+    c.move(2, 0)                                # slot 3
+    assert c.activate_current() == 3
+    assert c.active_slot == 3
+    assert c.rows()[2].active is True
+
+
+def test_reload_discards_edits():
+    c = make_controller()
+    _focus(c, "keybed_octave")
+    c.step(1)
+    c.reload()
+    assert c.any_dirty() is False
+    assert c.rows()[0].values["keybed_octave"] == 0

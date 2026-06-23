@@ -112,3 +112,31 @@ class EditorController:
     def undo_slot(self) -> None:
         i = self.slot_idx
         self._edited[i] = Program.from_payload(self._original[i].slot, self._original[i].raw)
+
+    # --- device actions --------------------------------------------------
+    def write_current(self):
+        i = self.slot_idx
+        prog = self._edited[i]
+        result = self.dev.send_program(prog)
+        self._original[i] = Program.from_payload(prog.slot, prog.to_payload())
+        return result
+
+    def write_all_dirty(self):
+        results = []
+        for i, prog in enumerate(self._edited):
+            if self._slot_dirty(i):
+                results.append(self.dev.send_program(prog))
+                self._original[i] = Program.from_payload(prog.slot, prog.to_payload())
+        return results
+
+    def activate_current(self) -> int | None:
+        slot = self._edited[self.slot_idx].slot
+        active = self.dev.activate(slot)
+        self.active_slot = active if active is not None else slot
+        return self.active_slot
+
+    def reload(self) -> None:
+        preset = self.dev.dump()
+        self.active_slot = self.dev.get_active_program()
+        self._original = _copy(preset.programs)
+        self._edited = _copy(preset.programs)
