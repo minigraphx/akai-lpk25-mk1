@@ -62,6 +62,7 @@ lpk25 monitor               # decoded live MIDI as you play (--raw, --all, --tim
 lpk25 edit <slot> [--channel N --octave N --transpose N --arp on/off
                    --arp-mode M --time-div D --clock int/ext --latch on/off
                    --tempo N --taps N --arp-octave N]   change fields on a slot
+lpk25 tui                                               interactive curses editor (all 4 programs)
 lpk25 show [slot] [--json]                              human-readable state
 lpk25 activate <slot>                                   recall a program on the device
 lpk25 preset save <name> [--from-slot N] [--force]      save a slot as a preset
@@ -72,6 +73,9 @@ lpk25 bank save <name> [--force]                        save all 4 slots as a ba
 lpk25 bank apply <name> [-y]                             write a bank onto all 4 slots
 lpk25 bank list | show <name> | delete <name>           manage saved banks
 ```
+
+`lpk25 tui` keys: ↑↓ slot · ←→ field · -/+ change · ⏎ type-in · w write · a activate ·
+s/l preset · b/B bank · r reload · m monitor · q quit
 
 Presets live in `$LPK25_PRESET_DIR` (default `~/.config/lpk25/presets`); full
 4-program **banks** in `$LPK25_BANK_DIR` (default `~/.config/lpk25/banks`); and
