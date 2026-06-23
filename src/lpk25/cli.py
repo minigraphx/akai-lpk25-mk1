@@ -353,6 +353,17 @@ def cmd_edit(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_activate(args: argparse.Namespace) -> int:
+    """Recall a stored program on the device (like pressing PROGRAM + PROG 1-4)."""
+    dev = _make_device(args)
+    active = dev.activate(args.slot, verify=not args.no_verify)
+    if active is None:
+        print(f"Sent activate for slot {args.slot} (not confirmed)")
+    else:
+        print(f"Active program is now slot {active}")
+    return 0
+
+
 def cmd_show(args: argparse.Namespace) -> int:
     dev = _make_device(args)
     if args.json:
@@ -685,6 +696,12 @@ def build_parser() -> argparse.ArgumentParser:
     ed.add_argument("--arp-octave", dest="arp_octave", type=int)
     ed.add_argument("--no-verify", action="store_true")
     ed.set_defaults(func=cmd_edit)
+
+    ac = sub.add_parser("activate", help="recall a stored program on the device (slot 1-4)")
+    ac.add_argument("slot", type=int, choices=(1, 2, 3, 4))
+    ac.add_argument("--no-verify", action="store_true",
+                    help="don't read the active program back to confirm")
+    ac.set_defaults(func=cmd_activate)
 
     sh = sub.add_parser("show", help="human-readable readout of the device state")
     sh.add_argument("slot", type=int, nargs="?", choices=(1, 2, 3, 4))
