@@ -1,3 +1,5 @@
+import pytest
+
 from lpk25 import cli, codec
 from lpk25.transport import MockTransport
 
@@ -49,6 +51,34 @@ def test_edit_rejects_out_of_range():
     assert rc != 0
     # nothing written: channel byte unchanged (default 0 -> channel 1)
     assert codec.decode_program(tr.programs[1])["midi_channel"] == 1
+
+
+def test_activate_sets_active_slot(capsys):
+    tr = MockTransport()
+    rc = run(["--mock", "activate", "3"], tr)
+    assert rc == 0
+    assert tr.active == 3
+    assert "slot 3" in capsys.readouterr().out
+
+
+def test_activate_then_show_marks_that_slot(capsys):
+    tr = MockTransport()
+    assert run(["--mock", "activate", "3"], tr) == 0
+    capsys.readouterr()  # drop the activate output
+    assert run(["--mock", "show"], tr) == 0
+    out = capsys.readouterr().out
+    # The single ▶-marked data row is slot 3 (slot is the first column).
+    marked = [ln for ln in out.splitlines() if ln.startswith("▶")]
+    assert len(marked) == 1
+    assert marked[0].split()[1] == "3"
+
+
+def test_activate_rejects_out_of_range_slot():
+    tr = MockTransport()
+    # argparse `choices` rejects this before the command runs.
+    with pytest.raises(SystemExit):
+        run(["--mock", "activate", "9"], tr)
+    assert tr.active == 1  # unchanged
 
 
 def test_show_table(capsys):

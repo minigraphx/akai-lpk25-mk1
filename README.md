@@ -63,6 +63,7 @@ lpk25 edit <slot> [--channel N --octave N --transpose N --arp on/off
                    --arp-mode M --time-div D --clock int/ext --latch on/off
                    --tempo N --taps N --arp-octave N]   change fields on a slot
 lpk25 show [slot] [--json]                              human-readable state
+lpk25 activate <slot>                                   recall a program on the device
 lpk25 preset save <name> [--from-slot N] [--force]      save a slot as a preset
 lpk25 preset apply <name> <slot>                        write a preset onto a slot
 lpk25 preset list                                       list saved presets

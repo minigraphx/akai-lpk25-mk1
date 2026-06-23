@@ -65,6 +65,26 @@ class Device:
         f = protocol.parse_frame(reply)
         return f.slot
 
+    def activate(self, slot: int, verify: bool = True, timeout: float = 1.0) -> int | None:
+        """Recall a stored program on the device (the hardware PROGRAM + PROG 1-4).
+
+        This selects which program is active; it does not alter program memory,
+        so no backup is taken. With ``verify``, the active program is read back
+        to confirm the switch took effect. Returns the confirmed active slot, or
+        None if the device didn't reply (or ``verify`` is off)."""
+        if slot not in SLOTS:
+            raise DeviceError(f"slot must be one of {SLOTS}, got {slot}")
+        self.transport.send(protocol.build_activate_program(slot, self.config))
+        time.sleep(MIN_DELAY_BETWEEN_FRAMES)
+        if not verify:
+            return None
+        active = self.get_active_program(timeout=timeout)
+        if active is not None and active != slot:
+            raise VerificationError(
+                f"activate slot {slot} not confirmed: device reports active slot {active}"
+            )
+        return active
+
     def get_program_payload(self, slot: int, timeout: float = 1.0) -> bytes:
         reply = self.transport.request(
             protocol.build_get_program(slot, self.config), timeout=timeout
