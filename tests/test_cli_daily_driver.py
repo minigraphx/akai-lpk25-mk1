@@ -147,3 +147,55 @@ def test_edit_bool_off():
     run(["--mock", "edit", "1", "--arp", "on"], tr)
     run(["--mock", "edit", "1", "--arp", "off"], tr)
     assert codec.decode_program(tr.programs[1])["arp_enabled"] is False
+
+
+def test_copy_single_dst():
+    tr = MockTransport()
+    run(["--mock", "edit", "1", "--channel", "7"], tr)       # make slot 1 distinctive
+    rc = run(["--mock", "copy", "1", "3", "--yes"], tr)
+    assert rc == 0
+    assert tr.programs[3][0] == 3                              # slot-echo corrected
+    assert codec.decode_program(tr.programs[3])["midi_channel"] == 7
+
+
+def test_copy_mirror_to_many_leaves_source():
+    tr = MockTransport()
+    run(["--mock", "edit", "1", "--channel", "9"], tr)
+    rc = run(["--mock", "copy", "1", "2", "3", "4", "--yes"], tr)
+    assert rc == 0
+    for d in (2, 3, 4):
+        assert codec.decode_program(tr.programs[d])["midi_channel"] == 9
+        assert tr.programs[d][0] == d
+    assert tr.programs[1][0] == 1                              # source slot echo intact
+
+
+def test_copy_confirm_yes(monkeypatch):
+    tr = MockTransport()
+    run(["--mock", "edit", "1", "--channel", "5"], tr)
+    monkeypatch.setattr("builtins.input", lambda *a: "y")
+    rc = run(["--mock", "copy", "1", "2"], tr)                # no --yes -> prompts
+    assert rc == 0
+    assert codec.decode_program(tr.programs[2])["midi_channel"] == 5
+
+
+def test_copy_confirm_no_aborts(monkeypatch):
+    tr = MockTransport()
+    before = bytes(tr.programs[2])
+    monkeypatch.setattr("builtins.input", lambda *a: "n")
+    rc = run(["--mock", "copy", "1", "2"], tr)
+    assert rc == 1
+    assert tr.programs[2] == before                           # nothing written
+
+
+def test_copy_self_is_nothing():
+    tr = MockTransport()
+    rc = run(["--mock", "copy", "1", "1", "--yes"], tr)
+    assert rc == 2
+
+
+def test_copy_dedupes_dsts():
+    tr = MockTransport()
+    run(["--mock", "edit", "1", "--channel", "8"], tr)
+    rc = run(["--mock", "copy", "1", "2", "2", "--yes"], tr)
+    assert rc == 0
+    assert codec.decode_program(tr.programs[2])["midi_channel"] == 8

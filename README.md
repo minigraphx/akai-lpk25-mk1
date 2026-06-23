@@ -58,6 +58,7 @@ lpk25 show [slot] [--json]                              human-readable state
 lpk25 preset save <name> [--from-slot N] [--force]      save a slot as a preset
 lpk25 preset apply <name> <slot>                        write a preset onto a slot
 lpk25 preset list                                       list saved presets
+lpk25 copy <src> <dst...> [--yes]                       copy a slot onto others
 ```
 
 Presets live in `$LPK25_PRESET_DIR` (default `~/.config/lpk25/presets`).

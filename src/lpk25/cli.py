@@ -313,6 +313,37 @@ def cmd_preset(args: argparse.Namespace) -> int:
     return 2
 
 
+def _confirm(prompt: str) -> bool:
+    """Ask a yes/no question on stdin. True only for 'y'/'yes' (case-insensitive)."""
+    return input(prompt).strip().lower() in ("y", "yes")
+
+
+def cmd_copy(args: argparse.Namespace) -> int:
+    src = args.src
+    dsts = sorted(set(args.dst))
+    if src in dsts:
+        dsts.remove(src)
+        _eprint(f"skipping slot {src} (same as source)")
+    if not dsts:
+        _eprint("nothing to copy (destination is the source)")
+        return 2
+    dev = _make_device(args)
+    src_prog = dev.get_program(src)
+    if not args.yes:
+        slots = ", ".join(str(d) for d in dsts)
+        prompt = f"About to overwrite slot(s) {slots} with a copy of slot {src}. Proceed? [y/N] "
+        if not _confirm(prompt):
+            _eprint("aborted; nothing written")
+            return 1
+    preset = Preset(programs=[src_prog.reslot(d) for d in dsts])
+    results = dev.load(preset, verify=not args.no_verify)
+    for r in results:
+        print(f"  slot {r.slot}: verified={r.verified}")
+    if results:
+        print(f"backup: {results[0].backup_path}")
+    return 0
+
+
 def cmd_load(args: argparse.Namespace) -> int:
     preset = Preset.load(args.file)
     dev = _make_device(args)
@@ -450,6 +481,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     pr_list = pr_sub.add_parser("list", help="list saved presets")
     pr_list.set_defaults(func=cmd_preset)
+
+    cp = sub.add_parser("copy", help="copy a program from one slot onto others")
+    cp.add_argument("src", type=int, choices=(1, 2, 3, 4))
+    cp.add_argument("dst", type=int, nargs="+", choices=(1, 2, 3, 4))
+    cp.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
+    cp.add_argument("--no-verify", action="store_true")
+    cp.set_defaults(func=cmd_copy)
 
     s = sub.add_parser("set", help="write one program from a JSON file")
     s.add_argument("slot", type=int, choices=(1, 2, 3, 4))
