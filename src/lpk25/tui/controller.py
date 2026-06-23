@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .. import codec, render
+from .. import codec, library, render
 from ..device import Device
 from ..model import Preset, Program
 
@@ -140,3 +140,22 @@ class EditorController:
         self.active_slot = self.dev.get_active_program()
         self._original = _copy(preset.programs)
         self._edited = _copy(preset.programs)
+
+    # --- library ---------------------------------------------------------
+    def save_preset(self, name: str, force: bool = False) -> str:
+        return library.save_preset(name, self._edited[self.slot_idx], force=force)
+
+    def load_preset_into_current(self, name: str) -> None:
+        prog = library.load_preset(name)
+        i = self.slot_idx
+        self._edited[i] = prog.reslot(self._edited[i].slot)
+
+    def save_bank(self, name: str, force: bool = False) -> str:
+        preset = Preset(programs=_copy(self._edited),
+                        device_model=getattr(self.dev.config, "model", None))
+        return library.save_bank(name, preset, force=force)
+
+    def load_bank(self, name: str) -> None:
+        preset = library.load_bank(name)
+        for i, prog in enumerate(preset.programs[: len(self._edited)]):
+            self._edited[i] = prog.reslot(self._edited[i].slot)

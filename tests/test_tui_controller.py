@@ -161,3 +161,29 @@ def test_reload_discards_edits():
     c.reload()
     assert c.any_dirty() is False
     assert c.rows()[0].values["keybed_octave"] == 0
+
+
+def test_preset_save_and_load_round_trip(tmp_path, monkeypatch):
+    monkeypatch.setenv("LPK25_PRESET_DIR", str(tmp_path))
+    c = make_controller()
+    _focus(c, "keybed_octave")
+    c.step(1)                                   # slot 1 octave = 1
+    c.save_preset("mylead")
+    # change slot 2 to a different value, then load the preset onto it
+    c.move(1, 0)
+    c.load_preset_into_current("mylead")
+    assert c.rows()[1].values["keybed_octave"] == 1
+    assert c.rows()[1].slot == 2                # slot echo rewritten to target
+    assert c.rows()[1].dirty is True
+
+
+def test_bank_save_and_load_round_trip(tmp_path, monkeypatch):
+    monkeypatch.setenv("LPK25_BANK_DIR", str(tmp_path))
+    c = make_controller()
+    _focus(c, "tempo")
+    c.set_value("150")                          # slot 1 tempo
+    c.save_bank("set-a")
+    c.reload()                                  # discard edits
+    c.load_bank("set-a")
+    assert c.rows()[0].values["tempo"] == 150
+    assert [r.slot for r in c.rows()] == [1, 2, 3, 4]
