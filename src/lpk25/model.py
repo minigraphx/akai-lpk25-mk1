@@ -121,6 +121,8 @@ class Preset:
                 continue
             if f.opcode != protocol.OP_SEND_PROGRAM:
                 continue
+            if f.model != protocol.MODEL_LPK25_MK1:
+                continue
             model = f.model
             programs.append(Program.from_payload(f.data[0], bytes(f.data)))
         if not programs:

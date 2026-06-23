@@ -70,6 +70,18 @@ def test_save_load_syx_round_trip(tmp_path):
     assert [x.raw for x in q.programs] == [x.raw for x in p.programs]
 
 
+def test_from_syx_skips_other_akai_model():
+    other = protocol.ProtocolConfig(model=protocol.MODEL_LPD8_MK1)   # 0x75, not LPK25
+    foreign = protocol.build_send_program(1, bytes([1, 2, 3]), other)
+    # foreign frame alone -> no LPK25 frames -> ValueError
+    import pytest
+    with pytest.raises(ValueError):
+        Preset.from_syx(foreign)
+    # foreign frame mixed with a real bank -> only the 4 LPK25 programs survive
+    q = Preset.from_syx(foreign + _bank().to_syx())
+    assert len(q.programs) == 4
+
+
 def test_save_load_json_still_works(tmp_path):
     p = _bank()
     path = str(tmp_path / "bank.json")
