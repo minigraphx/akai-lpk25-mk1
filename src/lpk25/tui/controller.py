@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .. import codec, render
+from ..device import Device
 from ..model import Preset, Program
 
 # Editable columns, in the same left-to-right order `show` prints them.
@@ -33,7 +34,7 @@ def _copy(programs: list[Program]) -> list[Program]:
 
 
 class EditorController:
-    def __init__(self, dev, preset: Preset, active_slot: int | None):
+    def __init__(self, dev: Device, preset: Preset, active_slot: int | None):
         self.dev = dev
         self._original: list[Program] = _copy(preset.programs)
         self._edited: list[Program] = _copy(preset.programs)
@@ -71,3 +72,42 @@ class EditorController:
     def move(self, d_slot: int, d_field: int) -> None:
         self.slot_idx = max(0, min(len(self._edited) - 1, self.slot_idx + d_slot))
         self.field_idx = max(0, min(len(FIELD_ORDER) - 1, self.field_idx + d_field))
+
+    # --- editing ---------------------------------------------------------
+    @staticmethod
+    def _stepped(f: codec.Field, cur: Any, delta: int) -> Any:
+        if f.kind == "bool":
+            return not bool(cur)
+        if f.kind == "enum":
+            assert f.enum is not None
+            codes = sorted(f.enum)
+            rev = {v: k for k, v in f.enum.items()}
+            code = rev.get(cur, cur if isinstance(cur, int) else codes[0])
+            i = codes.index(code) if code in codes else 0
+            return f.enum[codes[(i + delta) % len(codes)]]
+        v = int(cur) + delta
+        lo = f.lo if f.lo is not None else v
+        hi = f.hi if f.hi is not None else v
+        return max(lo, min(hi, v))
+
+    def step(self, delta: int) -> None:
+        f = self.focused_field()
+        self._edited[self.slot_idx].values[f.name] = self._stepped(
+            f, self._edited[self.slot_idx].values.get(f.name), delta
+        )
+
+    def set_value(self, text: str) -> None:
+        f = self.focused_field()
+        if f.kind in ("bool", "enum"):
+            raise codec.CodecError(f"{f.name} is not a numeric field (use -/+)")
+        try:
+            v = int(text)
+        except ValueError as e:
+            raise codec.CodecError(f"{f.name}: not a number: {text!r}") from e
+        prog = self._edited[self.slot_idx]
+        codec.encode_program({f.name: v}, prog.raw)   # validates range; raises CodecError
+        prog.values[f.name] = v
+
+    def undo_slot(self) -> None:
+        i = self.slot_idx
+        self._edited[i] = Program.from_payload(self._original[i].slot, self._original[i].raw)
