@@ -37,6 +37,34 @@ def _make_device(args: argparse.Namespace):
     return Device(_make_transport(args), model=args.model)
 
 
+def _format_change(c) -> str:
+    """One readable line for a codec.diff_payloads change (shared by `diff`
+    and `--dry-run`)."""
+    old = "--" if c.old is None else f"0x{c.old:02X} ({c.old})"
+    new = "--" if c.new is None else f"0x{c.new:02X} ({c.new})"
+    label = c.field or "unmapped"
+    mark = "confirmed" if c.verified else "unverified"
+    return f"  idx {c.index:2d}: {old} -> {new}   {label} [{mark}]"
+
+
+def _preview(dev, programs) -> int:
+    """Dry-run a set of writes: read each target slot and print what would
+    change, writing nothing. Mirrors the device's slot-echo handling (byte 0 is
+    the slot) so the diff matches exactly what a real write would store."""
+    for prog in programs:
+        current = dev.get_program(prog.slot)
+        target = bytes([prog.slot]) + prog.to_payload()[1:]
+        changes = codec.diff_payloads(current.raw, target)
+        if not changes:
+            print(f"slot {prog.slot}: no change")
+            continue
+        print(f"slot {prog.slot}: {len(changes)} byte(s) would change")
+        for c in changes:
+            print(_format_change(c))
+    print("\n(dry run — nothing written)")
+    return 0
+
+
 # --- commands -------------------------------------------------------------
 
 def cmd_ports(args: argparse.Namespace) -> int:
@@ -190,6 +218,8 @@ def cmd_set(args: argparse.Namespace) -> int:
     program = preset.programs[0]
     program.slot = args.slot
     dev = _make_device(args)
+    if args.dry_run:
+        return _preview(dev, [program])
     result = dev.send_program(program, verify=not args.no_verify)
     print(f"Wrote program {result.slot}; verified={result.verified}; backup={result.backup_path}")
     return 0
@@ -217,11 +247,7 @@ def cmd_diff(args: argparse.Namespace) -> int:
         total += len(changes)
         print(f"slot {slot}: {len(changes)} byte(s) changed")
         for c in changes:
-            old = "--" if c.old is None else f"0x{c.old:02X} ({c.old})"
-            new = "--" if c.new is None else f"0x{c.new:02X} ({c.new})"
-            label = c.field or "unmapped"
-            mark = "confirmed" if c.verified else "unverified"
-            print(f"  idx {c.index:2d}: {old} -> {new}   {label} [{mark}]")
+            print(_format_change(c))
     if total == 0:
         print("\nNo differences — the change may not have persisted to the program "
               "(try reselecting the program with the Prog button before re-reading).")
@@ -270,6 +296,8 @@ def cmd_edit(args: argparse.Namespace) -> int:
         values={**codec.decode_program(before.raw), **values},
         raw=before.raw,
     )
+    if args.dry_run:
+        return _preview(dev, [patched])
     result = dev.send_program(patched, verify=not args.no_verify)
     after = dev.get_program(args.slot)
     print(f"Wrote program {result.slot}; verified={result.verified}; "
@@ -315,7 +343,10 @@ def cmd_preset(args: argparse.Namespace) -> int:
         if args.preset_action == "apply":
             prog = library.load_preset(args.name)
             dev = _make_device(args)
-            result = dev.send_program(prog.reslot(args.slot), verify=not args.no_verify)
+            target = prog.reslot(args.slot)
+            if args.dry_run:
+                return _preview(dev, [target])
+            result = dev.send_program(target, verify=not args.no_verify)
             print(f"Applied preset {args.name} to slot {result.slot}; "
                   f"verified={result.verified}")
             return 0
@@ -345,7 +376,8 @@ def cmd_copy(args: argparse.Namespace) -> int:
     if not dsts:
         _eprint("nothing to copy (destination is the source)")
         return 2
-    if not args.yes:
+    # Confirm before any device read (skipped for --dry-run, which writes nothing).
+    if not args.yes and not args.dry_run:
         slots = ", ".join(str(d) for d in dsts)
         prompt = f"About to overwrite slot(s) {slots} with a copy of slot {src}. Proceed? [y/N] "
         if not _confirm(prompt):
@@ -353,8 +385,10 @@ def cmd_copy(args: argparse.Namespace) -> int:
             return 1
     dev = _make_device(args)
     src_prog = dev.get_program(src)
-    preset = Preset(programs=[src_prog.reslot(d) for d in dsts])
-    results = dev.load(preset, verify=not args.no_verify)
+    programs = [src_prog.reslot(d) for d in dsts]
+    if args.dry_run:
+        return _preview(dev, programs)
+    results = dev.load(Preset(programs=programs), verify=not args.no_verify)
     for r in results:
         print(f"  slot {r.slot}: verified={r.verified}")
     if results:
@@ -365,6 +399,8 @@ def cmd_copy(args: argparse.Namespace) -> int:
 def cmd_load(args: argparse.Namespace) -> int:
     preset = Preset.load(args.file)
     dev = _make_device(args)
+    if args.dry_run:
+        return _preview(dev, preset.programs)
     results = dev.load(preset, verify=not args.no_verify)
     for r in results:
         print(f"  slot {r.slot}: verified={r.verified}")
@@ -382,6 +418,8 @@ def cmd_backup(args: argparse.Namespace) -> int:
 
 def cmd_restore(args: argparse.Namespace) -> int:
     dev = _make_device(args)
+    if args.dry_run:
+        return _preview(dev, Preset.load(args.file).programs)
     results = dev.restore(args.file, verify=not args.no_verify)
     for r in results:
         print(f"  slot {r.slot}: verified={r.verified}")
@@ -427,6 +465,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="device model byte (e.g. 0x76); overrides the default guess",
     )
     p.add_argument("--mock", action="store_true", help="use the in-memory fake device")
+    p.add_argument(
+        "--dry-run", action="store_true",
+        help="for write commands: read the target slot(s) and print what would "
+             "change, without writing or backing up",
+    )
 
     sub = p.add_subparsers(dest="command", required=True)
 
