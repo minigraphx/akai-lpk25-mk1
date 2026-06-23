@@ -63,6 +63,14 @@ lpk25 copy <src> <dst...> [--yes]                       copy a slot onto others
 
 Presets live in `$LPK25_PRESET_DIR` (default `~/.config/lpk25/presets`).
 
+Add `--dry-run` before any write command (`set`, `load`, `edit`, `copy`,
+`preset apply`, `restore`) to preview the exact field/byte changes without
+writing or backing up:
+
+```bash
+lpk25 --dry-run edit 1 --tempo 120 --channel 5
+```
+
 Try the CLI with no hardware using the built-in fake device:
 
 ```bash
