@@ -24,6 +24,7 @@ program editing to modern macOS and Linux.
 - **Back up / restore** the whole device (JSON, plus raw `.syx` replay).
 - **Discovery tools** — device inquiry, model-byte probing, raw MIDI capture, and a
   live MIDI monitor (the behavioural oracle used to map the protocol).
+- **Shell completion** for bash/zsh/fish (`lpk25 completion <shell>`).
 - A clean, fully unit-tested Python library (`lpk25`) that a future GUI can build on.
 
 ## Install
@@ -35,6 +36,7 @@ Requires Python 3.9+.
 sudo apt-get install -y libasound2-dev   # Debian/Ubuntu
 
 pip install -e '.[midi]'        # editable install with the MIDI backend
+pip install -e '.[midi,completion]'   # ...also with tab-completion support
 ```
 
 The pure-Python core (`protocol`, `codec`, `model`) imports without the `[midi]`
@@ -46,6 +48,7 @@ extra, which is handy for tests and offline use.
 lpk25 ports                 # list MIDI ports (auto-detects "LPK25")
 lpk25 identify              # device inquiry + probe for the model byte
 lpk25 config                # show effective settings + config file path
+lpk25 completion bash       # print a tab-completion script (also zsh, fish)
 lpk25 dump -o my-presets.json
 lpk25 get 1 -o prog1.json
 lpk25 set 1 prog1.json      # auto-backup + verify
@@ -91,6 +94,27 @@ backup_dir = "~/Music/lpk25/backups"
 ```
 
 `lpk25 config` prints the effective settings and the file path.
+
+### Shell completion
+
+Tab-completion for subcommands, flags, and their choices (slots, arp modes,
+time divisions, …) is available for bash, zsh, and fish via
+[argcomplete](https://github.com/kislyuk/argcomplete) (install the extra with
+`pip install '.[completion]'`). Print the script for your shell and `eval` it
+from your startup file:
+
+```bash
+# bash — add to ~/.bashrc
+eval "$(lpk25 completion bash)"
+
+# zsh — add to ~/.zshrc
+eval "$(lpk25 completion zsh)"
+
+# fish — add to ~/.config/fish/config.fish
+lpk25 completion fish | source
+```
+
+Run `lpk25 completion` with no argument to autodetect the shell from `$SHELL`.
 
 Add `--dry-run` before any write command (`set`, `load`, `edit`, `copy`,
 `preset apply`, `restore`) to preview the exact field/byte changes without

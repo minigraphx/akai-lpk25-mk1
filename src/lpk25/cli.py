@@ -3,6 +3,7 @@
 Hardware commands need the MIDI extra (``pip install 'lpk25[midi]'``). Pure
 discovery/formatting still works without it via ``--mock``.
 """
+# PYTHON_ARGCOMPLETE_OK
 
 from __future__ import annotations
 
@@ -92,6 +93,35 @@ def cmd_config(args: argparse.Namespace) -> int:
     print(f"preset_dir: {library.preset_dir()}")
     print(f"bank_dir:   {library.bank_dir()}")
     print(f"backup_dir: {library.backup_dir()}")
+    return 0
+
+
+_COMPLETION_SHELLS = ("bash", "zsh", "fish")
+
+
+def _detect_shell() -> str | None:
+    """Best-effort guess of the user's shell from $SHELL (e.g. /bin/zsh -> zsh)."""
+    base = os.path.basename(os.environ.get("SHELL", ""))
+    return base if base in _COMPLETION_SHELLS else None
+
+
+def cmd_completion(args: argparse.Namespace) -> int:
+    """Print a shell completion script for bash/zsh/fish.
+
+    Eval it from your shell's startup file, e.g. add to ~/.bashrc:
+        eval "$(lpk25 completion bash)"
+    Powered by argcomplete (install with ``pip install 'lpk25[completion]'``)."""
+    try:
+        import argcomplete
+    except ImportError:
+        _eprint("shell completion requires argcomplete: pip install 'lpk25[completion]'")
+        return 2
+    shell = args.shell or _detect_shell()
+    if shell is None:
+        _eprint("could not detect your shell from $SHELL; pass one of: "
+                + ", ".join(_COMPLETION_SHELLS))
+        return 2
+    print(argcomplete.shellcode(["lpk25"], shell=shell))
     return 0
 
 
@@ -600,6 +630,14 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("config", help="show the effective configuration and file path"
                    ).set_defaults(func=cmd_config)
 
+    comp = sub.add_parser(
+        "completion",
+        help="print a shell completion script to eval in your shell startup file",
+    )
+    comp.add_argument("shell", nargs="?", choices=_COMPLETION_SHELLS,
+                      help="target shell (default: autodetect from $SHELL)")
+    comp.set_defaults(func=cmd_completion)
+
     mon = sub.add_parser("monitor", help="print the keyboard's live MIDI output (decoded)")
     mon.add_argument("--seconds", type=float, default=30.0)
     mon.add_argument("--raw", action="store_true", help="print raw hex instead of decoded text")
@@ -746,6 +784,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
+    # If argcomplete is installed and the shell is requesting completions, this
+    # exits the process; otherwise it is a no-op. Optional, so guard the import.
+    try:
+        import argcomplete
+    except ImportError:
+        pass
+    else:
+        argcomplete.autocomplete(parser)
     args = parser.parse_args(argv)
     try:
         config.apply(args)
