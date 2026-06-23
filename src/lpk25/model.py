@@ -97,8 +97,11 @@ class Preset:
         return cls.from_dict(json.loads(text))
 
     def to_syx(self) -> bytes:
-        """Serialise the preset as send-program SysEx frames (one per program)."""
-        cfg = protocol.ProtocolConfig(model=self.device_model or protocol.MODEL_LPK25_MK1)
+        """Serialise the preset as LPK25 send-program SysEx frames (one per program).
+
+        Frames are always stamped with the LPK25 model byte (0x76); `.syx` is an
+        LPK25-only format, so `from_syx` accepts exactly these frames."""
+        cfg = protocol.ProtocolConfig(model=protocol.MODEL_LPK25_MK1)
         out = bytearray()
         for p in self.programs:
             out += protocol.build_send_program(p.slot, p.raw[1:], cfg)

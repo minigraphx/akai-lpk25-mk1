@@ -82,6 +82,17 @@ def test_from_syx_skips_other_akai_model():
     assert len(q.programs) == 4
 
 
+def test_to_syx_normalises_model_so_roundtrip_survives_nondefault_device_model():
+    # A preset whose device_model isn't 0x76 must still round-trip: .syx is
+    # LPK25-only, so to_syx writes 0x76 frames that from_syx accepts.
+    p = _bank()
+    p.device_model = 0x77
+    q = Preset.from_syx(p.to_syx())
+    assert len(q.programs) == 4
+    assert [x.raw for x in q.programs] == [x.raw for x in p.programs]
+    assert q.device_model == 0x76
+
+
 def test_save_load_json_still_works(tmp_path):
     p = _bank()
     path = str(tmp_path / "bank.json")

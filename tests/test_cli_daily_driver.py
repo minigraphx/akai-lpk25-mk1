@@ -251,5 +251,5 @@ def test_convert_json_syx_json(tmp_path):
 def test_convert_same_path_errors(tmp_path):
     tr = MockTransport()
     f = str(tmp_path / "x.json")
-    run(["--mock", "dump", "-o", f], tr)
+    assert run(["--mock", "dump", "-o", f], tr) == 0
     assert run(["--mock", "convert", f, f], tr) == 2

@@ -65,7 +65,8 @@ lpk25 convert <in> <out>                                .json <-> .syx (offline)
 Any command that reads or writes a preset file accepts `.syx` as well as
 `.json` — the format is chosen by the file extension (e.g. `dump -o bank.syx`,
 `load bank.syx`). `.syx` files are standard send-program SysEx, replayable by
-any MIDI tool.
+any MIDI tool. `.syx` files carry program data only — device globals and a
+custom model byte are not preserved (the model is normalised to the LPK25 `0x76`).
 
 Presets live in `$LPK25_PRESET_DIR` (default `~/.config/lpk25/presets`).
 
