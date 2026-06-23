@@ -29,8 +29,11 @@ def _save(controller, io, kind: str) -> str | None:
         return f"saved {kind} {name}"
     except library.LibraryError:
         if io.confirm(f"{kind} {name!r} exists — overwrite?"):
-            saver(name, force=True)
-            return f"saved {kind} {name}"
+            try:
+                saver(name, force=True)
+                return f"saved {kind} {name}"
+            except Exception as exc:  # noqa: BLE001 - surfaced to status line
+                return f"save failed: {exc}"
     return "cancelled"
 
 

@@ -108,3 +108,33 @@ def test_l_loads_chosen_preset(tmp_path, monkeypatch):
     dispatch(curses.KEY_DOWN, c, UIState(), FakeIO())    # slot 2
     dispatch(ord("l"), c, UIState(), FakeIO(choose="p1"))
     assert c.rows()[1].values["keybed_octave"] == 1
+
+
+def test_s_saves_preset(tmp_path, monkeypatch):
+    monkeypatch.setenv("LPK25_PRESET_DIR", str(tmp_path))
+    from lpk25 import library
+    c = make()
+    msg = dispatch(ord("s"), c, UIState(), FakeIO(prompt="p1"))
+    assert "saved" in msg and "p1" in msg
+    assert "p1" in library.list_preset_names()
+
+
+def test_s_overwrite_confirm_forces_then_cancels(tmp_path, monkeypatch):
+    monkeypatch.setenv("LPK25_PRESET_DIR", str(tmp_path))
+    c = make()
+    dispatch(ord("s"), c, UIState(), FakeIO(prompt="dup"))            # first save
+    msg = dispatch(ord("s"), c, UIState(), FakeIO(prompt="dup", confirm=True))  # overwrite
+    assert "saved" in msg
+    msg2 = dispatch(ord("s"), c, UIState(), FakeIO(prompt="dup", confirm=False))  # decline
+    assert msg2 == "cancelled"
+
+
+def test_bank_save_and_load_via_dispatch(tmp_path, monkeypatch):
+    monkeypatch.setenv("LPK25_BANK_DIR", str(tmp_path))
+    c = make()
+    c.field_idx = [f.name for f in FIELD_ORDER].index("tempo")
+    dispatch(ord("\n"), c, UIState(), FakeIO(prompt="150"))           # set tempo 150
+    dispatch(ord("b"), c, UIState(), FakeIO(prompt="bankA"))          # save bank
+    c.reload()                                                        # discard edits
+    dispatch(ord("B"), c, UIState(), FakeIO(choose="bankA"))          # load bank
+    assert c.rows()[0].values["tempo"] == 150
