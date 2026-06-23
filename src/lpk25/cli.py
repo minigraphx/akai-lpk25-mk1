@@ -426,6 +426,60 @@ def cmd_restore(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_bank(args: argparse.Namespace) -> int:
+    """Named full-device banks: save/apply/list/show/delete all 4 programs."""
+    if args.bank_action == "list":
+        rows = library.list_banks()
+        if not rows:
+            print("(no banks)")
+            return 0
+        for name, preset in rows:
+            print(f"{name} ({len(preset.programs)} programs)")
+        return 0
+
+    try:
+        if args.bank_action == "save":
+            dev = _make_device(args)
+            preset = dev.dump()
+            path = library.save_bank(args.name, preset, force=args.force)
+            print(f"Saved bank {args.name} ({len(preset.programs)} programs) to {path}")
+            return 0
+
+        if args.bank_action == "show":
+            print(render.format_presets_table(library.load_bank(args.name)))
+            return 0
+
+        if args.bank_action == "delete":
+            path = library.delete_bank(args.name)
+            print(f"Deleted bank {args.name} ({path})")
+            return 0
+
+        if args.bank_action == "apply":
+            preset = library.load_bank(args.name)
+            dev = _make_device(args)
+            if args.dry_run:
+                return _preview(dev, preset.programs)
+            if not args.yes:
+                n = len(preset.programs)
+                prompt = (f"About to overwrite {n} slot(s) from bank {args.name!r}. "
+                          "Proceed? [y/N] ")
+                if not _confirm(prompt):
+                    _eprint("aborted; nothing written")
+                    return 1
+            results = dev.load(preset, verify=not args.no_verify)
+            for r in results:
+                print(f"  slot {r.slot}: verified={r.verified}")
+            if results:
+                print(f"backup: {results[0].backup_path}")
+            return 0
+    except library.LibraryError as exc:
+        _eprint(f"error: {exc}")
+        return 1
+
+    _eprint("unknown bank action")
+    return 2
+
+
 # --- helpers --------------------------------------------------------------
 
 def _split_syx(blob: bytes) -> list[bytes]:
@@ -547,6 +601,31 @@ def build_parser() -> argparse.ArgumentParser:
 
     pr_list = pr_sub.add_parser("list", help="list saved presets")
     pr_list.set_defaults(func=cmd_preset)
+
+    bk = sub.add_parser("bank", help="named full-device bank library (all 4 programs)")
+    bk_sub = bk.add_subparsers(dest="bank_action", required=True)
+
+    bk_save = bk_sub.add_parser("save", help="dump all 4 programs into a named bank")
+    bk_save.add_argument("name")
+    bk_save.add_argument("--force", action="store_true")
+    bk_save.set_defaults(func=cmd_bank)
+
+    bk_apply = bk_sub.add_parser("apply", help="write a named bank onto all 4 slots")
+    bk_apply.add_argument("name")
+    bk_apply.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
+    bk_apply.add_argument("--no-verify", action="store_true")
+    bk_apply.set_defaults(func=cmd_bank)
+
+    bk_list = bk_sub.add_parser("list", help="list saved banks")
+    bk_list.set_defaults(func=cmd_bank)
+
+    bk_show = bk_sub.add_parser("show", help="print a bank's 4-program table")
+    bk_show.add_argument("name")
+    bk_show.set_defaults(func=cmd_bank)
+
+    bk_delete = bk_sub.add_parser("delete", help="delete a saved bank")
+    bk_delete.add_argument("name")
+    bk_delete.set_defaults(func=cmd_bank)
 
     cp = sub.add_parser("copy", help="copy a program from one slot onto others")
     cp.add_argument("src", type=int, choices=(1, 2, 3, 4))
