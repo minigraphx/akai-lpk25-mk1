@@ -7,6 +7,7 @@ discovery/formatting still works without it via ``--mock``.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from . import __version__, codec, library, protocol, render
@@ -409,18 +410,70 @@ def cmd_load(args: argparse.Namespace) -> int:
     return 0
 
 
+def _backup_summary(path: str) -> str:
+    try:
+        preset = Preset.load(path)
+    except (OSError, ValueError):
+        return "(unreadable)"
+    chans = ",".join(
+        str(codec.decode_program(p.raw).get("midi_channel", "?")) for p in preset.programs
+    )
+    return f"{len(preset.programs)} programs, ch[{chans}]"
+
+
 def cmd_backup(args: argparse.Namespace) -> int:
-    dev = _make_device(args)
-    path = dev.backup(args.output or "backups")
-    print(f"Backup written to {path}")
-    return 0
+    action = getattr(args, "backup_action", None) or "save"
+    directory = args.output  # None -> the configured default ($LPK25_BACKUP_DIR)
+
+    if action == "save":
+        dev = _make_device(args)
+        path = dev.backup(directory) if directory else dev.backup()
+        print(f"Backup written to {path}")
+        return 0
+
+    if action == "list":
+        paths = library.list_backup_paths(directory)
+        if not paths:
+            print("(no backups)")
+            return 0
+        for p in paths:
+            print(f"{os.path.basename(p)}  {_backup_summary(p)}")
+        return 0
+
+    if action == "prune":
+        paths = library.list_backup_paths(directory)
+        doomed = paths[args.keep:]
+        if not doomed:
+            print(f"nothing to prune ({len(paths)} backup(s), keeping {args.keep})")
+            return 0
+        if not args.yes and not _confirm(
+            f"Delete {len(doomed)} old backup(s), keeping the newest {args.keep}? [y/N] "
+        ):
+            _eprint("aborted; nothing deleted")
+            return 1
+        deleted = library.prune_backups(args.keep, directory)
+        print(f"Deleted {len(deleted)} backup(s); kept {len(paths) - len(deleted)}.")
+        return 0
+
+    _eprint("unknown backup action")
+    return 2
 
 
 def cmd_restore(args: argparse.Namespace) -> int:
     dev = _make_device(args)
+    path = args.file
+    if args.latest:
+        path = library.latest_backup()
+        if path is None:
+            _eprint("no backups found to restore")
+            return 2
+        print(f"Restoring latest backup: {path}")
+    if path is None:
+        _eprint("specify a backup file or --latest")
+        return 2
     if args.dry_run:
-        return _preview(dev, Preset.load(args.file).programs)
-    results = dev.restore(args.file, verify=not args.no_verify)
+        return _preview(dev, Preset.load(path).programs)
+    results = dev.restore(path, verify=not args.no_verify)
     for r in results:
         print(f"  slot {r.slot}: verified={r.verified}")
     return 0
@@ -645,12 +698,29 @@ def build_parser() -> argparse.ArgumentParser:
     ld.add_argument("--no-verify", action="store_true")
     ld.set_defaults(func=cmd_load)
 
-    b = sub.add_parser("backup", help="back up all programs to a timestamped file")
-    b.add_argument("-o", "--output", default=None, help="output directory")
-    b.set_defaults(func=cmd_backup)
+    def _add_dir(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("-o", "--output", "--dir", dest="output", default=None,
+                            help="backup directory (default: $LPK25_BACKUP_DIR)")
+
+    b = sub.add_parser("backup", help="save / list / prune device backups")
+    _add_dir(b)
+    b.set_defaults(func=cmd_backup, backup_action=None)
+    b_sub = b.add_subparsers(dest="backup_action")
+    b_save = b_sub.add_parser("save", help="save a timestamped backup (default action)")
+    _add_dir(b_save)
+    b_save.set_defaults(func=cmd_backup, backup_action="save")
+    b_list = b_sub.add_parser("list", help="list backups, newest first")
+    _add_dir(b_list)
+    b_list.set_defaults(func=cmd_backup, backup_action="list")
+    b_prune = b_sub.add_parser("prune", help="delete old backups, keeping the newest N")
+    _add_dir(b_prune)
+    b_prune.add_argument("--keep", type=int, required=True, help="number of newest backups to keep")
+    b_prune.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
+    b_prune.set_defaults(func=cmd_backup, backup_action="prune")
 
     rst = sub.add_parser("restore", help="restore programs from a backup file")
-    rst.add_argument("file")
+    rst.add_argument("file", nargs="?", help="backup file (omit with --latest)")
+    rst.add_argument("--latest", action="store_true", help="restore the most recent backup")
     rst.add_argument("--no-verify", action="store_true")
     rst.set_defaults(func=cmd_restore)
 
