@@ -10,6 +10,9 @@ import curses
 from dataclasses import dataclass
 
 from .. import library
+from . import view as _view
+from .controller import EditorController
+from .monitor import MidiMonitor
 
 
 @dataclass
@@ -120,11 +123,6 @@ def dispatch(key: int, controller, ui: UIState, io) -> str | None:
         if not controller.any_dirty() or io.confirm("unsaved edits — quit anyway?"):
             ui.running = False
     return None
-
-
-from .controller import EditorController          # noqa: E402,I001
-from .monitor import MidiMonitor                  # noqa: E402
-from . import view as _view                       # noqa: E402
 
 
 class _CursesIO:
