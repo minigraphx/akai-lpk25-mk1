@@ -209,3 +209,18 @@ def test_full_payload_decodes_all_thirteen_bytes():
         "clock": "external", "arp_latch": True, "tempo_taps": 4,
         "tempo": 226, "arp_octave": 3,
     }
+
+
+def test_tempo_taps_confirmed_idx9():
+    # Hardware (2026-06-23): idx 9 = tempo_taps; taps=2 -> 2 taps set the tempo,
+    # taps=4 -> 2 taps ignored, 4 taps set it. Direct value = number of taps.
+    taps2 = bytes([1, 0, 4, 12, 1, 0, 2, 0, 0, 2, 0, 120, 0])
+    taps4 = bytes([1, 0, 4, 12, 1, 0, 2, 0, 0, 4, 0, 120, 0])
+    assert codec.decode_program(taps2)["tempo_taps"] == 2
+    assert codec.decode_program(taps4)["tempo_taps"] == 4
+    assert codec.encode_program({"tempo_taps": 3}, bytes(13))[9] == 3
+
+
+def test_all_fields_verified_on_hardware():
+    # The whole 13-byte program map is confirmed against a real LPK25 mk1.
+    assert codec.all_verified() is True

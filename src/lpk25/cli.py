@@ -263,8 +263,6 @@ def cmd_edit(args: argparse.Namespace) -> int:
     for c in codec.diff_payloads(before.raw, after.raw):
         label = c.field or f"idx{c.index}"
         print(f"  {label}: {c.old} -> {c.new}")
-    if "tempo_taps" in values:
-        _eprint("note: --taps writes idx 9 (tempo_taps), confirmed by elimination only")
     return 0
 
 

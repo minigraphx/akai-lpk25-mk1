@@ -21,11 +21,11 @@ Each of the **4 presets** holds these editable parameters:
 | 7 | Arp time division | 1/4, 1/4T, 1/8, 1/8T, 1/16, 1/16T, 1/32, 1/32T | ✅ idx 6, 0…7 |
 | 8 | Arp clock | internal / external | ✅ idx 7 (`1`=external stalled the arp) |
 | 9 | Arp latch | on / off | ✅ idx 8 (`1` → arp ran after release) |
-| 10 | Tap-tempo taps | 2 / 3 / 4 | 🟡 idx 9 (by elimination; default `03`) |
+| 10 | Tap-tempo taps | 2 / 3 / 4 | ✅ idx 9 (taps=2 → 2 taps set tempo; taps=4 → 2 ignored, 4 worked) |
 | 11 | Tempo | 30–240 BPM (2 bytes on device) | ✅ idx 10–11, 14-bit `(hi<<7)\|lo` |
 
-12 of 13 program bytes confirmed on real hardware (2026-06-23); only tempo_taps
-rests on by-elimination. See `docs/protocol.md` for the full byte map.
+**All 13 program bytes confirmed on real hardware (2026-06-23).** See
+`docs/protocol.md` for the full byte map.
 
 ## 2. Device operations (talk to the LPK25)
 

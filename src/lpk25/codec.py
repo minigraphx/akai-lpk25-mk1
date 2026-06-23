@@ -158,10 +158,11 @@ LPK25_MK1_FIELDS: list[Field] = [
     # tap arpeggiate continuously after release (103 notes over a 14s window vs.
     # the latch-off baseline that stopped on release). So this is arp_latch (0/1).
     Field("arp_latch", index=8, kind="bool", verified=True),
-    # idx 9 = tempo_taps by elimination (only remaining LPK25 parameter; default
-    # byte 03 = 3 taps). Editor-only, no clean MIDI signature, so the 2-4 encoding
-    # is unconfirmed -- position is certain, range is the hypothesis.
-    Field("tempo_taps", index=9, kind="int", offset=0, lo=2, hi=4),
+    # CONFIRMED (2026-06-23, real hardware): idx 9 = tempo_taps = how many TAP
+    # TEMPO presses are needed to set a new tempo. With idx9=2, two taps changed
+    # the tempo; with idx9=4, two taps were ignored but four taps changed it.
+    # Direct encoding: value = number of taps (2-4).
+    Field("tempo_taps", index=9, kind="int", offset=0, lo=2, hi=4, verified=True),
     # CONFIRMED (2026-06-23, real hardware): tempo is a 14-bit value spanning
     # idx 10 (high) + idx 11 (low): bpm = (idx10<<7)|idx11. A fast tap pushed it
     # to (1<<7)|98 = 226 BPM, with idx 10 ticking 00->01. Range 30-240.
@@ -169,8 +170,7 @@ LPK25_MK1_FIELDS: list[Field] = [
     # CONFIRMED (2026-06-23, real hardware): hold-ARP + an arp-octave key moves
     # only this trailing byte; "oct 3" -> 3. Direct 0-3 encoding.
     Field("arp_octave", index=12, kind="int", offset=0, lo=0, hi=3, verified=True),
-    # All 13 bytes mapped. 12 of 13 confirmed on hardware; only tempo_taps (idx 9)
-    # rests on by-elimination + the default value.
+    # All 13 program bytes mapped and CONFIRMED on real hardware (2026-06-23).
 ]
 
 

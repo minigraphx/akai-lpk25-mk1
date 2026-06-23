@@ -2,9 +2,8 @@
 
 > **Status: CONFIRMED against real hardware (2026-06-23).** Originally *derived*
 > from the Akai **LPD8 mk1** and **LPK25 MK2** (no public mk1 docs, no official
-> editor capture), the framing, model byte, opcodes, and 12 of the 13 program
-> bytes are now verified on a real LPK25 mk1 — only `tempo_taps` (idx 9) rests on
-> by-elimination. Confirmed facts are marked ✅; the lone hypothesis 🟡.
+> editor capture), the framing, model byte, opcodes, and **all 13 program bytes**
+> are now verified on a real LPK25 mk1. Every fact below is marked ✅.
 
 ## Frame structure (✅ confirmed on hardware)
 
@@ -102,20 +101,19 @@ off:
 | 6 | **time_division** | ✅ **CONFIRMED** — hold-ARP + `1/8` key → `2`; standard order 1/4…1/32T = 0…7 |
 | 7 | **clock** | ✅ **CONFIRMED** — writing `1` (with arp on) silenced output (arp stalled, no external clock); `0`=internal, `1`=external |
 | 8 | **arp_latch** | ✅ **CONFIRMED** — writing `1` made one tap arpeggiate forever after release; `0`/`1` |
-| 9 | tempo_taps | 🟡 by elimination (only param left) — `03` = default 3 taps; editor-only, encoding 2–4 unconfirmed |
+| 9 | **tempo_taps** | ✅ **CONFIRMED** — number of TAP TEMPO presses to set a tempo: with `2`, two taps changed the tempo; with `4`, two taps were ignored but four worked. Direct 2–4 |
 | 10–11 | **tempo** | ✅ **CONFIRMED** — 14-bit `(idx10<<7)\|idx11`, range 30–240 (fast tap → idx10 `00`→`01`, value 226) |
 | 12 | **arp_octave** | ✅ **CONFIRMED** — hold-ARP + `arp oct 3` key → `3`; direct 0–3 |
 
-> **Mapping status (2026-06-23): COMPLETE — 12 of 13 bytes confirmed on real
-> hardware**, the 13th (idx 9 tempo_taps) certain by elimination.
+> **Mapping status (2026-06-23): COMPLETE — all 13 of 13 bytes confirmed on real
+> hardware.**
 > - Panel-settable (change-one-setting-and-diff): `octave` (2), `arp_enabled`
 >   (4), `arp_mode` (5), `time_division` (6), `tempo` (10–11), `arp_octave` (12).
 > - Editor-only, confirmed via **write + behavioural oracle**: `midi_channel` (1,
 >   wrote ch 10 → keys on ch 10), `transpose` (3, wrote +12 → notes +12),
 >   `clock` (7, wrote external → arp stalled to silence), `arp_latch` (8, wrote
->   on → arp ran forever after release).
-> - `tempo_taps` (9): only remaining LPK25 parameter, default `03` = 3 taps;
->   position certain, the 2–4 range is the hypothesis.
+>   on → arp ran forever after release), `tempo_taps` (9, set 2 vs 4 → two taps
+>   changed the tempo only when taps=2).
 >
 > The **write path is confirmed**: send-program (`0x61`) works, a round-trip
 > (read → send same bytes → read) is byte-exact, and `set` read-back-verifies.

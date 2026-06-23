@@ -8,9 +8,9 @@ program editing to modern macOS and Linux.
 
 > **Project status: protocol confirmed against real hardware.** The mk1's SysEx
 > protocol isn't publicly documented, so it was reverse-engineered directly
-> against a real LPK25 mk1. The model byte (`0x76`), framing, opcodes, and **12 of
-> the 13 program bytes are verified** (only `tempo_taps` rests on by-elimination).
-> The CLI can read, edit, back up, and write programs safely — every write
+> against a real LPK25 mk1. The model byte (`0x76`), framing, opcodes, and **all
+> 13 program bytes are verified**. The CLI can read, edit, back up, and write
+> programs safely — every write
 > auto-backs-up and read-back-verifies. See `docs/protocol.md` for the full byte map.
 
 ## Features
@@ -79,16 +79,15 @@ lpk25 --model 0x77 dump
 
 The mk1 protocol was reverse-engineered against a real LPK25 mk1 and is fully
 documented in [`docs/protocol.md`](docs/protocol.md): the model byte, frame
-structure, opcodes, and the complete 13-byte program map. **12 of 13 program
-bytes are hardware-confirmed**; only `tempo_taps` (idx 9) rests on
-by-elimination. The mapping was done with the `diff` tool (change one setting on
-the device, dump, and see which byte moved) and the `monitor` behavioural oracle
-(write a value, play a key, observe the note channel/number).
+structure, opcodes, and the complete 13-byte program map — **all 13 program
+bytes are hardware-confirmed**. The mapping was done with the `diff` tool (change
+one setting on the device, dump, and see which byte moved) and the `monitor`
+behavioural oracle (write a value, play a key, observe the note channel/number).
 
-If you have an LPK25 mk1 and want to verify on your own unit — or help pin down
-`tempo_taps` — `lpk25 identify`, `lpk25 diff`, and `lpk25 monitor` are the tools
-that drove the mapping. See `docs/discovery-checklist.md` for the method and
-`docs/superpowers/specs/` for the design.
+If you have an LPK25 mk1 and want to verify on your own unit, `lpk25 identify`,
+`lpk25 diff`, and `lpk25 monitor` are the tools that drove the mapping. See
+`docs/discovery-checklist.md` for the method and `docs/superpowers/specs/` for
+the design.
 
 ## Development
 
