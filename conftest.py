@@ -17,3 +17,6 @@ def _isolate_lpk25_dirs(tmp_path, monkeypatch):
     monkeypatch.setenv("LPK25_PRESET_DIR", str(tmp_path / "presets"))
     monkeypatch.setenv("LPK25_BANK_DIR", str(tmp_path / "banks"))
     monkeypatch.setenv("LPK25_BACKUP_DIR", str(tmp_path / "backups"))
+    # Point the config file at a (missing) tmp path so tests never read the
+    # developer's real ~/.config/lpk25/config.toml.
+    monkeypatch.setenv("LPK25_CONFIG", str(tmp_path / "config.toml"))

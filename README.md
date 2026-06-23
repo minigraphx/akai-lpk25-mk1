@@ -45,6 +45,7 @@ extra, which is handy for tests and offline use.
 ```bash
 lpk25 ports                 # list MIDI ports (auto-detects "LPK25")
 lpk25 identify              # device inquiry + probe for the model byte
+lpk25 config                # show effective settings + config file path
 lpk25 dump -o my-presets.json
 lpk25 get 1 -o prog1.json
 lpk25 set 1 prog1.json      # auto-backup + verify
@@ -72,6 +73,24 @@ Presets live in `$LPK25_PRESET_DIR` (default `~/.config/lpk25/presets`); full
 4-program **banks** in `$LPK25_BANK_DIR` (default `~/.config/lpk25/banks`); and
 backups (including the automatic one before every write) in `$LPK25_BACKUP_DIR`
 (default `~/.config/lpk25/backups`).
+
+### Configuration
+
+Set defaults in `~/.config/lpk25/config.toml` (override the path with
+`$LPK25_CONFIG`) so you don't repeat connection flags. Precedence is
+**CLI flag > env var > config file > default**.
+
+```toml
+port = "LPK25"      # MIDI port-name substring
+# in_port  = "..."  # exact input port (optional)
+# out_port = "..."  # exact output port (optional)
+model = 0x76        # device model byte
+preset_dir = "~/Music/lpk25/presets"
+bank_dir   = "~/Music/lpk25/banks"
+backup_dir = "~/Music/lpk25/backups"
+```
+
+`lpk25 config` prints the effective settings and the file path.
 
 Add `--dry-run` before any write command (`set`, `load`, `edit`, `copy`,
 `preset apply`, `restore`) to preview the exact field/byte changes without

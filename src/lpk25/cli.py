@@ -10,7 +10,7 @@ import argparse
 import os
 import sys
 
-from . import __version__, codec, library, protocol, render
+from . import __version__, codec, config, library, protocol, render
 from .model import Preset
 
 
@@ -78,6 +78,20 @@ def cmd_ports(args: argparse.Namespace) -> int:
     print("Outputs:")
     for n in ports["outputs"]:
         print(f"  {n}")
+    return 0
+
+
+def cmd_config(args: argparse.Namespace) -> int:
+    """Show the effective configuration (after CLI > env > config > default)."""
+    path = config.config_path()
+    print(f"config file: {path}" + ("" if os.path.exists(path) else " (not found)"))
+    print(f"port:       {args.port}")
+    print(f"in_port:    {args.in_port or '(auto)'}")
+    print(f"out_port:   {args.out_port or '(auto)'}")
+    print(f"model:      {hex(args.model) if args.model is not None else '0x76 (default)'}")
+    print(f"preset_dir: {library.preset_dir()}")
+    print(f"bank_dir:   {library.bank_dir()}")
+    print(f"backup_dir: {library.backup_dir()}")
     return 0
 
 
@@ -564,7 +578,8 @@ def _warn_unverified() -> None:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="lpk25", description="Akai LPK25 mk1 editor")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    p.add_argument("--port", default="LPK25", help="substring to match the MIDI port name")
+    p.add_argument("--port", default=None,
+                   help="substring to match the MIDI port name (default: LPK25, or config)")
     p.add_argument("--in-port", default=None, help="exact MIDI input port name")
     p.add_argument("--out-port", default=None, help="exact MIDI output port name")
     p.add_argument(
@@ -582,6 +597,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("ports", help="list MIDI ports").set_defaults(func=cmd_ports)
     sub.add_parser("identify", help="device inquiry + model probe").set_defaults(func=cmd_identify)
+    sub.add_parser("config", help="show the effective configuration and file path"
+                   ).set_defaults(func=cmd_config)
 
     mon = sub.add_parser("monitor", help="print the keyboard's live MIDI output (decoded)")
     mon.add_argument("--seconds", type=float, default=30.0)
@@ -731,6 +748,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        config.apply(args)
         return args.func(args)
     except Exception as exc:  # noqa: BLE001 - top-level user-facing handler
         _eprint(f"error: {exc}")
