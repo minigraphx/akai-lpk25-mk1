@@ -279,8 +279,6 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 
 def cmd_preset(args: argparse.Namespace) -> int:
-    from .model import Program
-
     if args.preset_action == "list":
         rows = library.list_presets()
         if not rows:
@@ -302,10 +300,8 @@ def cmd_preset(args: argparse.Namespace) -> int:
 
         if args.preset_action == "apply":
             prog = library.load_preset(args.name)
-            # correct the slot-echo byte so read-back verify matches the target slot
-            fixed = Program.from_payload(args.slot, bytes([args.slot]) + prog.raw[1:])
             dev = _make_device(args)
-            result = dev.send_program(fixed, verify=not args.no_verify)
+            result = dev.send_program(prog.reslot(args.slot), verify=not args.no_verify)
             print(f"Applied preset {args.name} to slot {result.slot}; "
                   f"verified={result.verified}")
             return 0

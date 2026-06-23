@@ -41,6 +41,15 @@ class Program:
             return self.raw
         return codec.encode_program(self.values, self.raw)
 
+    def reslot(self, dst: int) -> Program:
+        """Return a copy of this program addressed to slot ``dst``.
+
+        Rewrites the slot-echo byte (payload[0]) to ``dst`` so a cross-slot write
+        reads back identically — the device echoes the target slot in byte 0."""
+        if not self.raw:
+            raise ValueError("cannot reslot a program with no raw payload")
+        return Program.from_payload(dst, bytes([dst]) + self.raw[1:])
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "slot": self.slot,
