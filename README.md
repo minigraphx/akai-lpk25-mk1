@@ -50,7 +50,7 @@ lpk25 set 1 prog1.json      # auto-backup + verify
 lpk25 load my-presets.json  # write all programs
 lpk25 backup                # timestamped backup into ./backups/
 lpk25 restore backups/lpk25-backup-XX…json
-lpk25 monitor               # print live MIDI as you play (behavioural oracle)
+lpk25 monitor               # decoded live MIDI as you play (--raw, --all, --timestamps)
 lpk25 edit <slot> [--channel N --octave N --transpose N --arp on/off
                    --arp-mode M --time-div D --clock int/ext --latch on/off
                    --tempo N --taps N --arp-octave N]   change fields on a slot

@@ -86,6 +86,10 @@ def cmd_identify(args: argparse.Namespace) -> int:
 
 
 def cmd_monitor(args: argparse.Namespace) -> int:
+    import time
+
+    from . import mididecode
+
     with _make_transport(args) as tr:
         mon = getattr(tr, "monitor", None)
         if mon is None:
@@ -93,8 +97,18 @@ def cmd_monitor(args: argparse.Namespace) -> int:
             return 2
         print(f"Monitoring MIDI input for {args.seconds}s. Play the keyboard... (Ctrl-C to stop)")
 
+        start: list[float] = []
+
         def show(frame: bytes) -> None:
-            print(" ".join(f"{b:02X}" for b in frame))
+            if not args.all and mididecode.is_noise(frame):
+                return
+            t = None
+            if args.timestamps:
+                now = time.monotonic()
+                if not start:
+                    start.append(now)
+                t = now - start[0]
+            print(mididecode.format_line(frame, raw=args.raw, t=t))
 
         try:
             mon(show, duration=args.seconds)
@@ -419,8 +433,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("ports", help="list MIDI ports").set_defaults(func=cmd_ports)
     sub.add_parser("identify", help="device inquiry + model probe").set_defaults(func=cmd_identify)
 
-    mon = sub.add_parser("monitor", help="print the keyboard's live MIDI output")
+    mon = sub.add_parser("monitor", help="print the keyboard's live MIDI output (decoded)")
     mon.add_argument("--seconds", type=float, default=30.0)
+    mon.add_argument("--raw", action="store_true", help="print raw hex instead of decoded text")
+    mon.add_argument("--all", action="store_true",
+                     help="also show Active Sensing and Clock (hidden by default)")
+    mon.add_argument("--timestamps", action="store_true",
+                     help="prefix each line with a relative timestamp")
     mon.set_defaults(func=cmd_monitor)
 
     rr = sub.add_parser("raw-recv", help="capture raw MIDI to a .syx file")
