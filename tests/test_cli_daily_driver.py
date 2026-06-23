@@ -1,4 +1,5 @@
 from lpk25 import cli, codec
+from lpk25.model import Preset
 from lpk25.transport import MockTransport
 
 
@@ -211,3 +212,44 @@ def test_copy_confirm_eof_aborts(monkeypatch):
     rc = run(["--mock", "copy", "1", "2"], tr)
     assert rc == 1
     assert tr.programs[2] == before
+
+
+def test_dump_syx_round_trips_to_device(tmp_path):
+    tr = MockTransport()
+    run(["--mock", "edit", "1", "--channel", "6"], tr)
+    syx = str(tmp_path / "bank.syx")
+    assert run(["--mock", "dump", "-o", syx], tr) == 0
+    run(["--mock", "edit", "1", "--channel", "1"], tr)        # change it
+    assert run(["--mock", "load", syx], tr) == 0              # load the .syx back
+    assert codec.decode_program(tr.programs[1])["midi_channel"] == 6
+
+
+def test_get_set_syx(tmp_path):
+    tr = MockTransport()
+    run(["--mock", "edit", "2", "--tempo", "150"], tr)
+    syx = str(tmp_path / "p2.syx")
+    assert run(["--mock", "get", "2", "-o", syx], tr) == 0
+    run(["--mock", "edit", "2", "--tempo", "120"], tr)
+    assert run(["--mock", "set", "2", syx], tr) == 0
+    assert codec.decode_program(tr.programs[2])["tempo"] == 150
+
+
+def test_convert_json_syx_json(tmp_path):
+    tr = MockTransport()
+    run(["--mock", "edit", "1", "--channel", "9"], tr)
+    j = str(tmp_path / "b.json")
+    s = str(tmp_path / "b.syx")
+    j2 = str(tmp_path / "b2.json")
+    run(["--mock", "dump", "-o", j], tr)
+    assert run(["--mock", "convert", j, s], tr) == 0
+    assert run(["--mock", "convert", s, j2], tr) == 0
+    a = Preset.load(j)
+    b = Preset.load(j2)
+    assert [p.raw for p in a.programs] == [p.raw for p in b.programs]
+
+
+def test_convert_same_path_errors(tmp_path):
+    tr = MockTransport()
+    f = str(tmp_path / "x.json")
+    run(["--mock", "dump", "-o", f], tr)
+    assert run(["--mock", "convert", f, f], tr) == 2

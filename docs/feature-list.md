@@ -49,7 +49,7 @@ Each of the **4 presets** holds these editable parameters:
 | Save preset to file | SAVE PRESET | ✅ (JSON) |
 | Load preset from file | LOAD PRESET | ✅ (JSON) |
 | Save/restore all 4 + backup | — | ✅ (`backup`/`restore`) |
-| `.syx` import/export (raw, interoperable) | — | ⬜ (`raw-send` exists; structured `.syx` export ⬜) |
+| `.syx` import/export (structured, interoperable) | — | ✅ (`convert`; `.syx` extension in get/dump/set/load) |
 | Human-editable format | — | ✅ (JSON) |
 
 ## 4. Discovery & reverse-engineering (mk1-specific)
