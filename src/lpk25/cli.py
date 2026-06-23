@@ -131,7 +131,7 @@ def cmd_raw_recv(args: argparse.Namespace) -> int:
 def cmd_raw_send(args: argparse.Namespace) -> int:
     with open(args.file, "rb") as fh:
         blob = fh.read()
-    frames = _split_syx(blob)
+    frames = protocol.split_sysex(blob)
     with _make_transport(args) as tr:
         for frame in frames:
             tr.send(frame)
@@ -375,21 +375,6 @@ def cmd_restore(args: argparse.Namespace) -> int:
 
 
 # --- helpers --------------------------------------------------------------
-
-def _split_syx(blob: bytes) -> list[bytes]:
-    frames: list[bytes] = []
-    cur = bytearray()
-    for b in blob:
-        if b == 0xF0:
-            cur = bytearray([b])
-        elif b == 0xF7 and cur:
-            cur.append(b)
-            frames.append(bytes(cur))
-            cur = bytearray()
-        elif cur:
-            cur.append(b)
-    return frames
-
 
 def _warn_unverified() -> None:
     if not codec.all_verified():

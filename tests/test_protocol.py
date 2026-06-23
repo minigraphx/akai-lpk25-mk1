@@ -1,3 +1,4 @@
+from lpk25 import protocol
 from lpk25 import protocol as p
 
 
@@ -63,3 +64,19 @@ def test_parse_identity_reply():
     assert reply.manufacturer == 0x47
     assert reply.family == 0x76
     assert reply.member == 0x19
+
+
+def test_split_sysex_multiple_frames():
+    f1 = bytes([0xF0, 0x47, 0x01, 0xF7])
+    f2 = bytes([0xF0, 0x47, 0x02, 0x03, 0xF7])
+    assert protocol.split_sysex(f1 + f2) == [f1, f2]
+
+
+def test_split_sysex_drops_bytes_between_frames():
+    f1 = bytes([0xF0, 0x01, 0xF7])
+    f2 = bytes([0xF0, 0x02, 0xF7])
+    assert protocol.split_sysex(f1 + bytes([0xAA, 0xAA]) + f2) == [f1, f2]
+
+
+def test_split_sysex_empty():
+    assert protocol.split_sysex(b"") == []
