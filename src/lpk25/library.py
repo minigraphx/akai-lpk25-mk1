@@ -42,6 +42,11 @@ def bank_dir() -> str:
     return _config_dir("LPK25_BANK_DIR", "banks")
 
 
+def backup_dir() -> str:
+    """Resolve the device-backup directory (``$LPK25_BACKUP_DIR``)."""
+    return _config_dir("LPK25_BACKUP_DIR", "backups")
+
+
 def _validate_name(name: str) -> None:
     if not name or name in (".", "..") or os.path.basename(name) != name:
         raise LibraryError(
@@ -160,3 +165,37 @@ def delete_bank(name: str, directory: str | None = None) -> str:
         raise LibraryError(f"bank {name!r} not found. Available: {avail}")
     os.remove(path)
     return path
+
+
+# --- device backups -------------------------------------------------------
+
+def list_backup_paths(directory: str | None = None) -> list[str]:
+    """Full paths of ``lpk25-backup-*.json`` files, newest first.
+
+    Sorted by mtime (filename as a stable tiebreaker)."""
+    directory = directory or backup_dir()
+    if not os.path.isdir(directory):
+        return []
+    paths = [
+        os.path.join(directory, f)
+        for f in os.listdir(directory)
+        if f.startswith("lpk25-backup-") and f.endswith(".json")
+    ]
+    paths.sort(key=lambda p: (os.path.getmtime(p), os.path.basename(p)), reverse=True)
+    return paths
+
+
+def latest_backup(directory: str | None = None) -> str | None:
+    """Path of the most recent backup, or None if there are none."""
+    paths = list_backup_paths(directory)
+    return paths[0] if paths else None
+
+
+def prune_backups(keep: int, directory: str | None = None) -> list[str]:
+    """Delete all but the newest ``keep`` backups. Returns the removed paths."""
+    if keep < 0:
+        raise LibraryError("keep must be >= 0")
+    to_delete = list_backup_paths(directory)[keep:]
+    for p in to_delete:
+        os.remove(p)
+    return to_delete

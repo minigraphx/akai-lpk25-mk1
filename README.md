@@ -49,8 +49,11 @@ lpk25 dump -o my-presets.json
 lpk25 get 1 -o prog1.json
 lpk25 set 1 prog1.json      # auto-backup + verify
 lpk25 load my-presets.json  # write all programs
-lpk25 backup                # timestamped backup into ./backups/
-lpk25 restore backups/lpk25-backup-XX…json
+lpk25 backup                # timestamped backup into $LPK25_BACKUP_DIR
+lpk25 backup list           # list backups, newest first
+lpk25 backup prune --keep 5 # delete old backups, keeping the newest 5
+lpk25 restore --latest      # restore the most recent backup
+lpk25 restore <file>        # restore a specific backup file
 lpk25 monitor               # decoded live MIDI as you play (--raw, --all, --timestamps)
 lpk25 edit <slot> [--channel N --octave N --transpose N --arp on/off
                    --arp-mode M --time-div D --clock int/ext --latch on/off
@@ -66,7 +69,9 @@ lpk25 bank list | show <name> | delete <name>           manage saved banks
 ```
 
 Presets live in `$LPK25_PRESET_DIR` (default `~/.config/lpk25/presets`); full
-4-program **banks** live in `$LPK25_BANK_DIR` (default `~/.config/lpk25/banks`).
+4-program **banks** in `$LPK25_BANK_DIR` (default `~/.config/lpk25/banks`); and
+backups (including the automatic one before every write) in `$LPK25_BACKUP_DIR`
+(default `~/.config/lpk25/backups`).
 
 Add `--dry-run` before any write command (`set`, `load`, `edit`, `copy`,
 `preset apply`, `restore`) to preview the exact field/byte changes without
