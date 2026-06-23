@@ -327,14 +327,14 @@ def cmd_copy(args: argparse.Namespace) -> int:
     if not dsts:
         _eprint("nothing to copy (destination is the source)")
         return 2
-    dev = _make_device(args)
-    src_prog = dev.get_program(src)
     if not args.yes:
         slots = ", ".join(str(d) for d in dsts)
         prompt = f"About to overwrite slot(s) {slots} with a copy of slot {src}. Proceed? [y/N] "
         if not _confirm(prompt):
             _eprint("aborted; nothing written")
             return 1
+    dev = _make_device(args)
+    src_prog = dev.get_program(src)
     preset = Preset(programs=[src_prog.reslot(d) for d in dsts])
     results = dev.load(preset, verify=not args.no_verify)
     for r in results:

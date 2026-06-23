@@ -199,3 +199,4 @@ def test_copy_dedupes_dsts():
     rc = run(["--mock", "copy", "1", "2", "2", "--yes"], tr)
     assert rc == 0
     assert codec.decode_program(tr.programs[2])["midi_channel"] == 8
+    assert tr.programs[2][0] == 2
