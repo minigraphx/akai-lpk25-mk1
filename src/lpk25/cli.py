@@ -314,8 +314,12 @@ def cmd_preset(args: argparse.Namespace) -> int:
 
 
 def _confirm(prompt: str) -> bool:
-    """Ask a yes/no question on stdin. True only for 'y'/'yes' (case-insensitive)."""
-    return input(prompt).strip().lower() in ("y", "yes")
+    """Ask a yes/no question on stdin. True only for 'y'/'yes' (case-insensitive).
+    Treats EOF (closed stdin) as 'no'."""
+    try:
+        return input(prompt).strip().lower() in ("y", "yes")
+    except EOFError:
+        return False
 
 
 def cmd_copy(args: argparse.Namespace) -> int:

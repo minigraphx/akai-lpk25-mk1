@@ -81,7 +81,7 @@ Each of the **4 presets** holds these editable parameters:
 | Feature | Status |
 |---------|--------|
 | Pure-Python core, unit-testable without hardware | ✅ |
-| Unit tests (codec/protocol/model/mock/cli) | ✅ (65) |
+| Unit tests (codec/protocol/model/mock/cli) | ✅ |
 | Lint (ruff) | ✅ |
 | CI (ruff + pytest, 3.9 & 3.12) | ✅ |
 | Linux support | ✅ (primary dev target) |

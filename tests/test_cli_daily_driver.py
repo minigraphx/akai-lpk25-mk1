@@ -200,3 +200,14 @@ def test_copy_dedupes_dsts():
     assert rc == 0
     assert codec.decode_program(tr.programs[2])["midi_channel"] == 8
     assert tr.programs[2][0] == 2
+
+
+def test_copy_confirm_eof_aborts(monkeypatch):
+    tr = MockTransport()
+    before = bytes(tr.programs[2])
+    def _raise(*a):
+        raise EOFError
+    monkeypatch.setattr("builtins.input", _raise)
+    rc = run(["--mock", "copy", "1", "2"], tr)
+    assert rc == 1
+    assert tr.programs[2] == before
