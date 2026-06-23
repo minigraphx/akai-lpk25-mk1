@@ -92,9 +92,10 @@ class EditorController:
 
     def step(self, delta: int) -> None:
         f = self.focused_field()
-        self._edited[self.slot_idx].values[f.name] = self._stepped(
-            f, self._edited[self.slot_idx].values.get(f.name), delta
-        )
+        prog = self._edited[self.slot_idx]
+        new_val = self._stepped(f, prog.values.get(f.name), delta)
+        prog.raw = codec.encode_program({f.name: new_val}, prog.raw)
+        prog.values[f.name] = new_val
 
     def set_value(self, text: str) -> None:
         f = self.focused_field()
@@ -105,7 +106,7 @@ class EditorController:
         except ValueError as e:
             raise codec.CodecError(f"{f.name}: not a number: {text!r}") from e
         prog = self._edited[self.slot_idx]
-        codec.encode_program({f.name: v}, prog.raw)   # validates range; raises CodecError
+        prog.raw = codec.encode_program({f.name: v}, prog.raw)   # validates range AND updates raw
         prog.values[f.name] = v
 
     def undo_slot(self) -> None:

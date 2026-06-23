@@ -109,3 +109,15 @@ def test_undo_slot_reverts():
     c.undo_slot()
     assert c.rows()[0].dirty is False
     assert c.rows()[0].values["keybed_octave"] == 0
+
+
+def test_edits_keep_raw_consistent_for_library_save():
+    c = make_controller()
+    _focus(c, "keybed_octave")
+    c.step(1)
+    prog = c._edited[0]
+    # raw must reflect the edit, so library save (which serializes raw) round-trips it
+    assert codec.decode_program(prog.raw)["keybed_octave"] == 1
+    _focus(c, "tempo")
+    c.set_value("150")
+    assert codec.decode_program(c._edited[0].raw)["tempo"] == 150
