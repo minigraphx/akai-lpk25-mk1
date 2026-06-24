@@ -14,6 +14,8 @@ def test_check_backend_present(monkeypatch):
     r = dg.check_backend(mock=False)
     assert r.status == "ok"
     assert "mido" in r.detail
+    # version is resolved via importlib.metadata, not mido.__version__ (gone in mido 1.3+)
+    assert "?" not in r.detail
 
 
 def test_check_backend_missing_gives_install_hint(monkeypatch):

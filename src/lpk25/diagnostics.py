@@ -8,6 +8,7 @@ the CLI injects a ``device_factory`` — so every check is unit-testable.
 
 from __future__ import annotations
 
+import importlib.metadata
 import importlib.util
 from dataclasses import dataclass
 from typing import Callable, Literal
@@ -50,9 +51,10 @@ def check_backend(mock: bool = False) -> CheckResult:
         return CheckResult(name, "fail", "mido not installed", INSTALL_HINT)
     if not _module_present("rtmidi"):
         return CheckResult(name, "fail", "python-rtmidi not installed", INSTALL_HINT)
-    import mido
-
-    ver = getattr(mido, "__version__", "?")
+    try:
+        ver = importlib.metadata.version("mido")
+    except importlib.metadata.PackageNotFoundError:
+        ver = "?"
     return CheckResult(name, "ok", f"mido {ver}, python-rtmidi present")
 
 
