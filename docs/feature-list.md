@@ -37,6 +37,7 @@ Each of the **4 presets** holds these editable parameters:
 | Write all 4 presets | — | 🟡 (`load`) — same path as `set`, not yet exercised on all 4 |
 | Choose target slot (PRESET #) | EDIT PRESET field | ✅ (slot arg) |
 | Edit single fields on a slot | (inline, no editor) | ✅ (`edit`) |
+| Interactive multi-field editor | full editor screen | ✅ (`tui`) |
 | Human-readable state readout | — | ✅ (`show`) |
 | Named single-program preset library | SAVE/LOAD PRESET | ✅ (`preset save/apply/list`) |
 | Copy preset (read slot A → write slot B) | copy workflow | ✅ (`copy`, one or more dsts) |

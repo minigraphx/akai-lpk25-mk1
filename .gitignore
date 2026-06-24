@@ -32,3 +32,6 @@ id_rsa*
 *.syx
 backups/
 *.bak
+
+# Subagent-driven-development scratch (briefs, reports, ledger, review packages)
+.superpowers/

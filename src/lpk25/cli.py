@@ -372,6 +372,16 @@ def cmd_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_tui(args: argparse.Namespace) -> int:
+    """Open the interactive curses editor."""
+    if not sys.stdout.isatty():
+        _eprint("error: tui requires an interactive terminal")
+        return 2
+    from .tui import app  # lazy: keep curses out of the other commands
+
+    return app.run(_make_transport(args), mock=getattr(args, "mock", False))
+
+
 def cmd_preset(args: argparse.Namespace) -> int:
     if args.preset_action == "list":
         rows = library.list_presets()
@@ -700,6 +710,9 @@ def build_parser() -> argparse.ArgumentParser:
     sh.add_argument("slot", type=int, nargs="?", choices=(1, 2, 3, 4))
     sh.add_argument("--json", action="store_true", help="print dump JSON instead")
     sh.set_defaults(func=cmd_show)
+
+    tu = sub.add_parser("tui", help="interactive curses editor for all 4 programs")
+    tu.set_defaults(func=cmd_tui)
 
     pr = sub.add_parser("preset", help="named single-program preset library")
     pr_sub = pr.add_subparsers(dest="preset_action", required=True)
