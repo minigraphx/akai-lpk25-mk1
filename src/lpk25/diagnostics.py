@@ -12,6 +12,8 @@ import importlib.util
 from dataclasses import dataclass
 from typing import Callable, Literal
 
+from . import protocol
+
 Status = Literal["ok", "warn", "fail", "skip"]
 
 INSTALL_HINT = (
@@ -92,25 +94,20 @@ def check_ports(
 def _active_program(transport, model: int) -> int | None:
     """Best-effort, read-only get-active-program. None if unsupported/no reply."""
     try:
-        from . import protocol
         cfg = protocol.ProtocolConfig(model=model)
         reply = transport.request(protocol.build_get_active_program(cfg))
         if reply is None:
             return None
         return protocol.parse_frame(reply).slot
-    except Exception:  # noqa: BLE001
+    except (protocol.ProtocolError, OSError):
         return None
 
 
 def check_device(
-    transport, expected_model: int = None
+    transport, expected_model: int = protocol.MODEL_LPK25_MK1
 ) -> CheckResult:
     """Check that a device responds and matches the expected model."""
-    from . import protocol
     from .discovery import detect_model
-
-    if expected_model is None:
-        expected_model = protocol.MODEL_LPK25_MK1
 
     name = "Device responds"
     model = detect_model(transport)
@@ -167,8 +164,6 @@ def run_diagnostics(
 ) -> list[CheckResult]:
     """Run all diagnostics checks in dependency order, skipping downstream on
     failure."""
-    from . import protocol
-
     results: list[CheckResult] = []
 
     backend = check_backend(mock)
