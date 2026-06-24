@@ -87,3 +87,130 @@ def check_ports(
             "Pass --port SUBSTR (or --in-port/--out-port) to choose a port.",
         )
     return CheckResult(name, "ok", f"matched in/out: {in_name} / {out_name}")
+
+
+def _active_program(transport, model: int) -> int | None:
+    """Best-effort, read-only get-active-program. None if unsupported/no reply."""
+    try:
+        from . import protocol
+        cfg = protocol.ProtocolConfig(model=model)
+        reply = transport.request(protocol.build_get_active_program(cfg))
+        if reply is None:
+            return None
+        return protocol.parse_frame(reply).slot
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def check_device(
+    transport, expected_model: int = None
+) -> CheckResult:
+    """Check that a device responds and matches the expected model."""
+    from . import protocol
+    from .discovery import detect_model
+
+    if expected_model is None:
+        expected_model = protocol.MODEL_LPK25_MK1
+
+    name = "Device responds"
+    model = detect_model(transport)
+    if model is None:
+        return CheckResult(
+            name, "fail", "no reply to device inquiry or model probe",
+            "Device may be asleep or disconnected — press a key to wake it, "
+            "re-seat the USB cable, or check --port.",
+        )
+    if model != expected_model:
+        return CheckResult(
+            name, "warn",
+            f"model 0x{model:02X} answered (expected 0x{expected_model:02X})",
+            f"Pass --model 0x{model:02X} if this is the device you mean to use.",
+        )
+    detail = f"model 0x{model:02X} (LPK25 mk1)"
+    active = _active_program(transport, model)
+    if active is not None:
+        detail += f", active program {active}"
+    return CheckResult(name, "ok", detail)
+
+
+def check_roundtrip(device, slot: int = 1) -> CheckResult:
+    """Check that a device round-trips a program write correctly."""
+    name = "Write round-trip"
+    try:
+        backup_path = device.backup()
+    except Exception as exc:  # noqa: BLE001
+        return CheckResult(
+            name, "fail", f"backup failed: {exc}",
+            "Check that the backup directory is writable.",
+        )
+    try:
+        prog = device.get_program(slot)
+        device.send_program(prog, verify=True, backup_dir=None)
+    except Exception as exc:  # noqa: BLE001
+        return CheckResult(name, "fail", f"slot {slot}: {exc}")
+    return CheckResult(
+        name, "ok",
+        f"slot {slot} write verified, no net change; backup at {backup_path}",
+    )
+
+
+def run_diagnostics(
+    *,
+    mock: bool,
+    port_match: str,
+    in_port: str | None,
+    out_port: str | None,
+    model: int | None,
+    roundtrip: bool,
+    device_factory: Callable[[], object],
+    list_ports_fn: Callable[[], dict] | None = None,
+) -> list[CheckResult]:
+    """Run all diagnostics checks in dependency order, skipping downstream on
+    failure."""
+    from . import protocol
+
+    results: list[CheckResult] = []
+
+    backend = check_backend(mock)
+    results.append(backend)
+
+    if backend.status == "ok":
+        ports = check_ports(mock, port_match, in_port, out_port, list_ports_fn)
+    else:
+        ports = _skip("MIDI ports", backend.name)
+    results.append(ports)
+
+    expected = model if model is not None else protocol.MODEL_LPK25_MK1
+    device = None
+    if ports.status == "ok":
+        try:
+            device = device_factory()
+            dev_result = check_device(device.transport, expected)
+        except Exception as exc:  # noqa: BLE001
+            dev_result = CheckResult(
+                "Device responds", "fail", f"could not open device: {exc}",
+                "Check --port and that no other application holds the MIDI "
+                "port.",
+            )
+    else:
+        dev_result = _skip("Device responds", ports.name)
+    results.append(dev_result)
+
+    if not roundtrip:
+        rt = CheckResult(
+            "Write round-trip", "skip",
+            "pass --roundtrip to test the write path",
+        )
+    elif dev_result.status in ("ok", "warn") and device is not None:
+        rt = check_roundtrip(device)
+    else:
+        rt = _skip("Write round-trip", "Device responds")
+    results.append(rt)
+
+    if device is not None:
+        try:
+            device.transport.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+    return results
