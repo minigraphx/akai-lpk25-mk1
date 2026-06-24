@@ -57,6 +57,7 @@ Each of the **4 presets** holds these editable parameters:
 | Feature | Status |
 |---------|--------|
 | List/auto-detect MIDI ports | ✅ (`ports`) |
+| MIDI setup & device self-diagnostic | ✅ (`doctor`): ordered checks backend → ports → device → optional write round-trip; ✅/❌ + fix hint per step; `--roundtrip` opt-in write test; non-zero exit on failure |
 | Probe candidate model bytes (read-only) | ✅ (`identify` → probe) |
 | Universal Device Inquiry | ✅ **supported** — real hardware answers it (family LSB = model `0x76`), contradicting the MIDI chart; confirms model + probe agree |
 | Capture raw MIDI/SysEx to file | ✅ (`raw-recv`) |

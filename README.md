@@ -24,6 +24,8 @@ program editing to modern macOS and Linux.
 - **Back up / restore** the whole device (JSON, plus raw `.syx` replay).
 - **Discovery tools** — device inquiry, model-byte probing, raw MIDI capture, and a
   live MIDI monitor (the behavioural oracle used to map the protocol).
+- **`doctor` self-diagnostic** — one ordered checklist (backend → ports → device →
+  optional write round-trip) with ✅/❌ and a fix hint per step; non-zero exit on failure.
 - **Shell completion** for bash/zsh/fish (`lpk25 completion <shell>`).
 - A clean, fully unit-tested Python library (`lpk25`) that a future GUI can build on.
 
@@ -48,6 +50,7 @@ extra, which is handy for tests and offline use.
 lpk25 ports                 # list MIDI ports (auto-detects "LPK25")
 lpk25 identify              # device inquiry + probe for the model byte
 lpk25 config                # show effective settings + config file path
+lpk25 doctor [--roundtrip]  # diagnose MIDI setup + connectivity (✅/❌ checklist)
 lpk25 completion bash       # print a tab-completion script (also zsh, fish)
 lpk25 dump -o my-presets.json
 lpk25 get 1 -o prog1.json

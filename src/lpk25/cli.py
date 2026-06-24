@@ -69,6 +69,38 @@ def _preview(dev, programs) -> int:
 
 # --- commands -------------------------------------------------------------
 
+_DOCTOR_MARKS = {"ok": "✅", "warn": "⚠️", "fail": "❌", "skip": "⏭"}
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """Run the MIDI-setup / connectivity checklist and exit non-zero on failure."""
+    from . import diagnostics
+
+    results = diagnostics.run_diagnostics(
+        mock=getattr(args, "mock", False),
+        port_match=args.port,
+        in_port=args.in_port,
+        out_port=args.out_port,
+        model=args.model,
+        roundtrip=getattr(args, "roundtrip", False),
+        device_factory=lambda: _make_device(args),
+    )
+    print("lpk25 doctor — MIDI setup & device connectivity\n")
+    fails = 0
+    for r in results:
+        print(f"{_DOCTOR_MARKS[r.status]} {r.name:<16} {r.detail}")
+        if r.hint and r.status in ("warn", "fail"):
+            print(f"   → {r.hint}")
+        if r.status == "fail":
+            fails += 1
+    print()
+    if fails:
+        print(f"{fails} issue{'s' if fails != 1 else ''} found.")
+        return 1
+    print("All checks passed.")
+    return 0
+
+
 def cmd_ports(args: argparse.Namespace) -> int:
     from .transport import list_ports
 
@@ -633,6 +665,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("identify", help="device inquiry + model probe").set_defaults(func=cmd_identify)
     sub.add_parser("config", help="show the effective configuration and file path"
                    ).set_defaults(func=cmd_config)
+
+    doc = sub.add_parser("doctor", help="diagnose MIDI setup and device connectivity")
+    doc.add_argument(
+        "--roundtrip", action="store_true",
+        help="also test the write path (safe: backs up, writes identical bytes back, verifies)",
+    )
+    doc.set_defaults(func=cmd_doctor)
 
     comp = sub.add_parser(
         "completion",
