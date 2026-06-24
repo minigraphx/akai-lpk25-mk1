@@ -1,6 +1,7 @@
 import pytest
 
-from lpk25.model import Program
+from lpk25 import protocol
+from lpk25.model import Preset, Program
 
 
 def make(slot=1):
@@ -22,3 +23,79 @@ def test_reslot_sets_echo_and_slot_preserves_rest():
 def test_reslot_empty_raw_raises():
     with pytest.raises(ValueError):
         Program(slot=1, raw=b"").reslot(2)
+
+
+def _bank():
+    return Preset(
+        programs=[
+            Program.from_payload(s, bytes([s, s, 4, 12, 0, 0, 5, 0, 0, 3, 0, 120, 0]))
+            for s in (1, 2, 3, 4)
+        ],
+        device_model=0x76,
+    )
+
+
+def test_to_syx_one_frame_per_program():
+    frames = protocol.split_sysex(_bank().to_syx())
+    assert len(frames) == 4
+    f = protocol.parse_frame(frames[0])
+    assert f.manufacturer == 0x47 and f.model == 0x76
+    assert f.opcode == protocol.OP_SEND_PROGRAM
+    assert f.data[0] == 1 and len(f.data) == 13   # slot echo + full 13-byte payload
+
+
+def test_syx_round_trips():
+    p = _bank()
+    q = Preset.from_syx(p.to_syx())
+    assert [x.slot for x in q.programs] == [1, 2, 3, 4]
+    assert [x.raw for x in q.programs] == [x.raw for x in p.programs]
+
+
+def test_from_syx_skips_non_program_frames():
+    stray = bytes([0xF0, 0x7E, 0x7F, 0x06, 0x02, 0xF7])   # a device-inquiry-style frame
+    q = Preset.from_syx(stray + _bank().to_syx())
+    assert len(q.programs) == 4
+
+
+def test_from_syx_no_frames_raises():
+    with pytest.raises(ValueError):
+        Preset.from_syx(bytes([0xF0, 0x7E, 0x7F, 0x06, 0x02, 0xF7]))
+
+
+def test_save_load_syx_round_trip(tmp_path):
+    p = _bank()
+    path = str(tmp_path / "bank.syx")
+    p.save(path)
+    q = Preset.load(path)
+    assert [x.raw for x in q.programs] == [x.raw for x in p.programs]
+
+
+def test_from_syx_skips_other_akai_model():
+    other = protocol.ProtocolConfig(model=protocol.MODEL_LPD8_MK1)   # 0x75, not LPK25
+    foreign = protocol.build_send_program(1, bytes([1, 2, 3]), other)
+    # foreign frame alone -> no LPK25 frames -> ValueError
+    import pytest
+    with pytest.raises(ValueError):
+        Preset.from_syx(foreign)
+    # foreign frame mixed with a real bank -> only the 4 LPK25 programs survive
+    q = Preset.from_syx(foreign + _bank().to_syx())
+    assert len(q.programs) == 4
+
+
+def test_to_syx_normalises_model_so_roundtrip_survives_nondefault_device_model():
+    # A preset whose device_model isn't 0x76 must still round-trip: .syx is
+    # LPK25-only, so to_syx writes 0x76 frames that from_syx accepts.
+    p = _bank()
+    p.device_model = 0x77
+    q = Preset.from_syx(p.to_syx())
+    assert len(q.programs) == 4
+    assert [x.raw for x in q.programs] == [x.raw for x in p.programs]
+    assert q.device_model == 0x76
+
+
+def test_save_load_json_still_works(tmp_path):
+    p = _bank()
+    path = str(tmp_path / "bank.json")
+    p.save(path)
+    q = Preset.load(path)
+    assert [x.raw for x in q.programs] == [x.raw for x in p.programs]

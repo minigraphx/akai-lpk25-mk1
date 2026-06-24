@@ -122,6 +122,24 @@ def parse_frame(raw: bytes) -> Frame:
     return Frame(manufacturer, device, model, opcode, data)
 
 
+def split_sysex(blob: bytes) -> list[bytes]:
+    """Split a byte blob into complete ``F0 … F7`` SysEx frames.
+
+    Bytes that fall outside an ``F0``-started, ``F7``-terminated run are dropped."""
+    frames: list[bytes] = []
+    cur = bytearray()
+    for b in blob:
+        if b == SYSEX_START:
+            cur = bytearray([b])
+        elif b == SYSEX_END and cur:
+            cur.append(b)
+            frames.append(bytes(cur))
+            cur = bytearray()
+        elif cur:
+            cur.append(b)
+    return frames
+
+
 # --- Convenience builders -------------------------------------------------
 
 def build_get_program(slot: int, config: ProtocolConfig | None = None) -> bytes:

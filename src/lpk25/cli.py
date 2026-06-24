@@ -218,7 +218,7 @@ def cmd_raw_recv(args: argparse.Namespace) -> int:
 def cmd_raw_send(args: argparse.Namespace) -> int:
     with open(args.file, "rb") as fh:
         blob = fh.read()
-    frames = _split_syx(blob)
+    frames = protocol.split_sysex(blob)
     with _make_transport(args) as tr:
         for frame in frames:
             tr.send(frame)
@@ -229,13 +229,11 @@ def cmd_raw_send(args: argparse.Namespace) -> int:
 def cmd_dump(args: argparse.Namespace) -> int:
     dev = _make_device(args)
     preset = dev.dump()
-    text = preset.to_json()
     if args.output:
-        with open(args.output, "w", encoding="utf-8") as fh:
-            fh.write(text)
+        preset.save(args.output)
         print(f"Wrote {len(preset.programs)} program(s) to {args.output}")
     else:
-        print(text)
+        print(preset.to_json())
     _warn_unverified()
     return 0
 
@@ -244,13 +242,11 @@ def cmd_get(args: argparse.Namespace) -> int:
     dev = _make_device(args)
     program = dev.get_program(args.slot)
     preset = Preset(programs=[program], device_model=dev.config.model)
-    text = preset.to_json()
     if args.output:
-        with open(args.output, "w", encoding="utf-8") as fh:
-            fh.write(text)
+        preset.save(args.output)
         print(f"Wrote program {args.slot} to {args.output}")
     else:
-        print(text)
+        print(preset.to_json())
     _warn_unverified()
     return 0
 
@@ -475,6 +471,18 @@ def cmd_load(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_convert(args: argparse.Namespace) -> int:
+    import os
+
+    if os.path.abspath(args.src) == os.path.abspath(args.dst):
+        _eprint("in and out are the same file")
+        return 2
+    preset = Preset.load(args.src)
+    preset.save(args.dst)
+    print(f"Converted {len(preset.programs)} program(s): {args.src} -> {args.dst}")
+    return 0
+
+
 def _backup_summary(path: str) -> str:
     try:
         preset = Preset.load(path)
@@ -599,21 +607,6 @@ def cmd_bank(args: argparse.Namespace) -> int:
 
 
 # --- helpers --------------------------------------------------------------
-
-def _split_syx(blob: bytes) -> list[bytes]:
-    frames: list[bytes] = []
-    cur = bytearray()
-    for b in blob:
-        if b == 0xF0:
-            cur = bytearray([b])
-        elif b == 0xF7 and cur:
-            cur.append(b)
-            frames.append(bytes(cur))
-            cur = bytearray()
-        elif cur:
-            cur.append(b)
-    return frames
-
 
 def _warn_unverified() -> None:
     if not codec.all_verified():
@@ -782,6 +775,11 @@ def build_parser() -> argparse.ArgumentParser:
     ld.add_argument("file")
     ld.add_argument("--no-verify", action="store_true")
     ld.set_defaults(func=cmd_load)
+
+    cv = sub.add_parser("convert", help="convert a preset between .json and .syx (offline)")
+    cv.add_argument("src", help="input file (.json or .syx)")
+    cv.add_argument("dst", help="output file (.json or .syx)")
+    cv.set_defaults(func=cmd_convert)
 
     def _add_dir(parser: argparse.ArgumentParser) -> None:
         parser.add_argument("-o", "--output", "--dir", dest="output", default=None,

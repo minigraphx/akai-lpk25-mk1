@@ -69,6 +69,7 @@ lpk25 preset save <name> [--from-slot N] [--force]      save a slot as a preset
 lpk25 preset apply <name> <slot>                        write a preset onto a slot
 lpk25 preset list                                       list saved presets
 lpk25 copy <src> <dst...> [--yes]                       copy a slot onto others
+lpk25 convert <in> <out>                                .json <-> .syx (offline)
 lpk25 bank save <name> [--force]                        save all 4 slots as a bank
 lpk25 bank apply <name> [-y]                             write a bank onto all 4 slots
 lpk25 bank list | show <name> | delete <name>           manage saved banks
@@ -76,6 +77,12 @@ lpk25 bank list | show <name> | delete <name>           manage saved banks
 
 `lpk25 tui` keys: ↑↓ slot · ←→ field · -/+ change · ⏎ type-in · w write · a activate ·
 s/l preset · b/B bank · r reload · m monitor · q quit
+
+Any command that reads or writes a preset file accepts `.syx` as well as
+`.json` — the format is chosen by the file extension (e.g. `dump -o bank.syx`,
+`load bank.syx`). `.syx` files are standard send-program SysEx, replayable by
+any MIDI tool. `.syx` files carry program data only — device globals and a
+custom model byte are not preserved (the model is normalised to the LPK25 `0x76`).
 
 Presets live in `$LPK25_PRESET_DIR` (default `~/.config/lpk25/presets`); full
 4-program **banks** in `$LPK25_BANK_DIR` (default `~/.config/lpk25/banks`); and

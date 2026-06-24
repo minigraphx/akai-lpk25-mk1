@@ -12,7 +12,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import codec
+from . import codec, protocol
 
 SCHEMA_VERSION = 1
 
@@ -96,11 +96,54 @@ class Preset:
     def from_json(cls, text: str) -> Preset:
         return cls.from_dict(json.loads(text))
 
+    def to_syx(self) -> bytes:
+        """Serialise the preset as LPK25 send-program SysEx frames (one per program).
+
+        Frames are always stamped with the LPK25 model byte (0x76); `.syx` is an
+        LPK25-only format, so `from_syx` accepts exactly these frames."""
+        cfg = protocol.ProtocolConfig(model=protocol.MODEL_LPK25_MK1)
+        out = bytearray()
+        for p in self.programs:
+            out += protocol.build_send_program(p.slot, p.raw[1:], cfg)
+        return bytes(out)
+
+    @classmethod
+    def from_syx(cls, blob: bytes) -> Preset:
+        """Parse send-program SysEx frames back into a preset.
+
+        Ignores frames that are not Akai LPK25 send-program frames; raises
+        ValueError if no program frames are found."""
+        programs: list[Program] = []
+        model = None
+        for frame in protocol.split_sysex(blob):
+            try:
+                f = protocol.parse_frame(frame)
+            except protocol.ProtocolError:
+                continue
+            if f.manufacturer != protocol.MANUFACTURER_AKAI:
+                continue
+            if f.opcode != protocol.OP_SEND_PROGRAM:
+                continue
+            if f.model != protocol.MODEL_LPK25_MK1:
+                continue
+            model = f.model
+            programs.append(Program.from_payload(f.data[0], bytes(f.data)))
+        if not programs:
+            raise ValueError("no LPK25 send-program frames found in .syx data")
+        return cls(programs=programs, device_model=model)
+
     def save(self, path: str) -> None:
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(self.to_json())
+        if path.lower().endswith(".syx"):
+            with open(path, "wb") as fh:
+                fh.write(self.to_syx())
+        else:
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(self.to_json())
 
     @classmethod
     def load(cls, path: str) -> Preset:
+        if path.lower().endswith(".syx"):
+            with open(path, "rb") as fh:
+                return cls.from_syx(fh.read())
         with open(path, encoding="utf-8") as fh:
             return cls.from_json(fh.read())
