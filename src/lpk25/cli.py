@@ -3,13 +3,15 @@
 Hardware commands need the MIDI extra (``pip install 'lpk25[midi]'``). Pure
 discovery/formatting still works without it via ``--mock``.
 """
+# PYTHON_ARGCOMPLETE_OK
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
-from . import __version__, codec, library, protocol, render
+from . import __version__, codec, config, library, protocol, render
 from .model import Preset
 
 
@@ -37,6 +39,34 @@ def _make_device(args: argparse.Namespace):
     return Device(_make_transport(args), model=args.model)
 
 
+def _format_change(c) -> str:
+    """One readable line for a codec.diff_payloads change (shared by `diff`
+    and `--dry-run`)."""
+    old = "--" if c.old is None else f"0x{c.old:02X} ({c.old})"
+    new = "--" if c.new is None else f"0x{c.new:02X} ({c.new})"
+    label = c.field or "unmapped"
+    mark = "confirmed" if c.verified else "unverified"
+    return f"  idx {c.index:2d}: {old} -> {new}   {label} [{mark}]"
+
+
+def _preview(dev, programs) -> int:
+    """Dry-run a set of writes: read each target slot and print what would
+    change, writing nothing. Mirrors the device's slot-echo handling (byte 0 is
+    the slot) so the diff matches exactly what a real write would store."""
+    for prog in programs:
+        current = dev.get_program(prog.slot)
+        target = bytes([prog.slot]) + prog.to_payload()[1:]
+        changes = codec.diff_payloads(current.raw, target)
+        if not changes:
+            print(f"slot {prog.slot}: no change")
+            continue
+        print(f"slot {prog.slot}: {len(changes)} byte(s) would change")
+        for c in changes:
+            print(_format_change(c))
+    print("\n(dry run — nothing written)")
+    return 0
+
+
 # --- commands -------------------------------------------------------------
 
 def cmd_ports(args: argparse.Namespace) -> int:
@@ -49,6 +79,49 @@ def cmd_ports(args: argparse.Namespace) -> int:
     print("Outputs:")
     for n in ports["outputs"]:
         print(f"  {n}")
+    return 0
+
+
+def cmd_config(args: argparse.Namespace) -> int:
+    """Show the effective configuration (after CLI > env > config > default)."""
+    path = config.config_path()
+    print(f"config file: {path}" + ("" if os.path.exists(path) else " (not found)"))
+    print(f"port:       {args.port}")
+    print(f"in_port:    {args.in_port or '(auto)'}")
+    print(f"out_port:   {args.out_port or '(auto)'}")
+    print(f"model:      {hex(args.model) if args.model is not None else '0x76 (default)'}")
+    print(f"preset_dir: {library.preset_dir()}")
+    print(f"bank_dir:   {library.bank_dir()}")
+    print(f"backup_dir: {library.backup_dir()}")
+    return 0
+
+
+_COMPLETION_SHELLS = ("bash", "zsh", "fish")
+
+
+def _detect_shell() -> str | None:
+    """Best-effort guess of the user's shell from $SHELL (e.g. /bin/zsh -> zsh)."""
+    base = os.path.basename(os.environ.get("SHELL", ""))
+    return base if base in _COMPLETION_SHELLS else None
+
+
+def cmd_completion(args: argparse.Namespace) -> int:
+    """Print a shell completion script for bash/zsh/fish.
+
+    Eval it from your shell's startup file, e.g. add to ~/.bashrc:
+        eval "$(lpk25 completion bash)"
+    Powered by argcomplete (install with ``pip install 'lpk25[completion]'``)."""
+    try:
+        import argcomplete
+    except ImportError:
+        _eprint("shell completion requires argcomplete: pip install 'lpk25[completion]'")
+        return 2
+    shell = args.shell or _detect_shell()
+    if shell is None:
+        _eprint("could not detect your shell from $SHELL; pass one of: "
+                + ", ".join(_COMPLETION_SHELLS))
+        return 2
+    print(argcomplete.shellcode(["lpk25"], shell=shell))
     return 0
 
 
@@ -86,6 +159,10 @@ def cmd_identify(args: argparse.Namespace) -> int:
 
 
 def cmd_monitor(args: argparse.Namespace) -> int:
+    import time
+
+    from . import mididecode
+
     with _make_transport(args) as tr:
         mon = getattr(tr, "monitor", None)
         if mon is None:
@@ -93,8 +170,18 @@ def cmd_monitor(args: argparse.Namespace) -> int:
             return 2
         print(f"Monitoring MIDI input for {args.seconds}s. Play the keyboard... (Ctrl-C to stop)")
 
+        start: list[float] = []
+
         def show(frame: bytes) -> None:
-            print(" ".join(f"{b:02X}" for b in frame))
+            if not args.all and mididecode.is_noise(frame):
+                return
+            t = None
+            if args.timestamps:
+                now = time.monotonic()
+                if not start:
+                    start.append(now)
+                t = now - start[0]
+            print(mididecode.format_line(frame, raw=args.raw, t=t))
 
         try:
             mon(show, duration=args.seconds)
@@ -172,6 +259,8 @@ def cmd_set(args: argparse.Namespace) -> int:
     program = preset.programs[0]
     program.slot = args.slot
     dev = _make_device(args)
+    if args.dry_run:
+        return _preview(dev, [program])
     result = dev.send_program(program, verify=not args.no_verify)
     print(f"Wrote program {result.slot}; verified={result.verified}; backup={result.backup_path}")
     return 0
@@ -199,11 +288,7 @@ def cmd_diff(args: argparse.Namespace) -> int:
         total += len(changes)
         print(f"slot {slot}: {len(changes)} byte(s) changed")
         for c in changes:
-            old = "--" if c.old is None else f"0x{c.old:02X} ({c.old})"
-            new = "--" if c.new is None else f"0x{c.new:02X} ({c.new})"
-            label = c.field or "unmapped"
-            mark = "confirmed" if c.verified else "unverified"
-            print(f"  idx {c.index:2d}: {old} -> {new}   {label} [{mark}]")
+            print(_format_change(c))
     if total == 0:
         print("\nNo differences — the change may not have persisted to the program "
               "(try reselecting the program with the Prog button before re-reading).")
@@ -252,6 +337,8 @@ def cmd_edit(args: argparse.Namespace) -> int:
         values={**codec.decode_program(before.raw), **values},
         raw=before.raw,
     )
+    if args.dry_run:
+        return _preview(dev, [patched])
     result = dev.send_program(patched, verify=not args.no_verify)
     after = dev.get_program(args.slot)
     print(f"Wrote program {result.slot}; verified={result.verified}; "
@@ -259,6 +346,17 @@ def cmd_edit(args: argparse.Namespace) -> int:
     for c in codec.diff_payloads(before.raw, after.raw):
         label = c.field or f"idx{c.index}"
         print(f"  {label}: {c.old} -> {c.new}")
+    return 0
+
+
+def cmd_activate(args: argparse.Namespace) -> int:
+    """Recall a stored program on the device (like pressing PROGRAM + PROG 1-4)."""
+    dev = _make_device(args)
+    active = dev.activate(args.slot, verify=not args.no_verify)
+    if active is None:
+        print(f"Sent activate for slot {args.slot} (not confirmed)")
+    else:
+        print(f"Active program is now slot {active}")
     return 0
 
 
@@ -297,7 +395,10 @@ def cmd_preset(args: argparse.Namespace) -> int:
         if args.preset_action == "apply":
             prog = library.load_preset(args.name)
             dev = _make_device(args)
-            result = dev.send_program(prog.reslot(args.slot), verify=not args.no_verify)
+            target = prog.reslot(args.slot)
+            if args.dry_run:
+                return _preview(dev, [target])
+            result = dev.send_program(target, verify=not args.no_verify)
             print(f"Applied preset {args.name} to slot {result.slot}; "
                   f"verified={result.verified}")
             return 0
@@ -327,7 +428,8 @@ def cmd_copy(args: argparse.Namespace) -> int:
     if not dsts:
         _eprint("nothing to copy (destination is the source)")
         return 2
-    if not args.yes:
+    # Confirm before any device read (skipped for --dry-run, which writes nothing).
+    if not args.yes and not args.dry_run:
         slots = ", ".join(str(d) for d in dsts)
         prompt = f"About to overwrite slot(s) {slots} with a copy of slot {src}. Proceed? [y/N] "
         if not _confirm(prompt):
@@ -335,8 +437,10 @@ def cmd_copy(args: argparse.Namespace) -> int:
             return 1
     dev = _make_device(args)
     src_prog = dev.get_program(src)
-    preset = Preset(programs=[src_prog.reslot(d) for d in dsts])
-    results = dev.load(preset, verify=not args.no_verify)
+    programs = [src_prog.reslot(d) for d in dsts]
+    if args.dry_run:
+        return _preview(dev, programs)
+    results = dev.load(Preset(programs=programs), verify=not args.no_verify)
     for r in results:
         print(f"  slot {r.slot}: verified={r.verified}")
     if results:
@@ -347,6 +451,8 @@ def cmd_copy(args: argparse.Namespace) -> int:
 def cmd_load(args: argparse.Namespace) -> int:
     preset = Preset.load(args.file)
     dev = _make_device(args)
+    if args.dry_run:
+        return _preview(dev, preset.programs)
     results = dev.load(preset, verify=not args.no_verify)
     for r in results:
         print(f"  slot {r.slot}: verified={r.verified}")
@@ -367,19 +473,127 @@ def cmd_convert(args: argparse.Namespace) -> int:
     return 0
 
 
+def _backup_summary(path: str) -> str:
+    try:
+        preset = Preset.load(path)
+    except (OSError, ValueError):
+        return "(unreadable)"
+    chans = ",".join(
+        str(codec.decode_program(p.raw).get("midi_channel", "?")) for p in preset.programs
+    )
+    return f"{len(preset.programs)} programs, ch[{chans}]"
+
+
 def cmd_backup(args: argparse.Namespace) -> int:
-    dev = _make_device(args)
-    path = dev.backup(args.output or "backups")
-    print(f"Backup written to {path}")
-    return 0
+    action = getattr(args, "backup_action", None) or "save"
+    directory = args.output  # None -> the configured default ($LPK25_BACKUP_DIR)
+
+    if action == "save":
+        dev = _make_device(args)
+        path = dev.backup(directory) if directory else dev.backup()
+        print(f"Backup written to {path}")
+        return 0
+
+    if action == "list":
+        paths = library.list_backup_paths(directory)
+        if not paths:
+            print("(no backups)")
+            return 0
+        for p in paths:
+            print(f"{os.path.basename(p)}  {_backup_summary(p)}")
+        return 0
+
+    if action == "prune":
+        paths = library.list_backup_paths(directory)
+        doomed = paths[args.keep:]
+        if not doomed:
+            print(f"nothing to prune ({len(paths)} backup(s), keeping {args.keep})")
+            return 0
+        if not args.yes and not _confirm(
+            f"Delete {len(doomed)} old backup(s), keeping the newest {args.keep}? [y/N] "
+        ):
+            _eprint("aborted; nothing deleted")
+            return 1
+        deleted = library.prune_backups(args.keep, directory)
+        print(f"Deleted {len(deleted)} backup(s); kept {len(paths) - len(deleted)}.")
+        return 0
+
+    _eprint("unknown backup action")
+    return 2
 
 
 def cmd_restore(args: argparse.Namespace) -> int:
     dev = _make_device(args)
-    results = dev.restore(args.file, verify=not args.no_verify)
+    path = args.file
+    if args.latest:
+        path = library.latest_backup()
+        if path is None:
+            _eprint("no backups found to restore")
+            return 2
+        print(f"Restoring latest backup: {path}")
+    if path is None:
+        _eprint("specify a backup file or --latest")
+        return 2
+    if args.dry_run:
+        return _preview(dev, Preset.load(path).programs)
+    results = dev.restore(path, verify=not args.no_verify)
     for r in results:
         print(f"  slot {r.slot}: verified={r.verified}")
     return 0
+
+
+def cmd_bank(args: argparse.Namespace) -> int:
+    """Named full-device banks: save/apply/list/show/delete all 4 programs."""
+    if args.bank_action == "list":
+        rows = library.list_banks()
+        if not rows:
+            print("(no banks)")
+            return 0
+        for name, preset in rows:
+            print(f"{name} ({len(preset.programs)} programs)")
+        return 0
+
+    try:
+        if args.bank_action == "save":
+            dev = _make_device(args)
+            preset = dev.dump()
+            path = library.save_bank(args.name, preset, force=args.force)
+            print(f"Saved bank {args.name} ({len(preset.programs)} programs) to {path}")
+            return 0
+
+        if args.bank_action == "show":
+            print(render.format_presets_table(library.load_bank(args.name)))
+            return 0
+
+        if args.bank_action == "delete":
+            path = library.delete_bank(args.name)
+            print(f"Deleted bank {args.name} ({path})")
+            return 0
+
+        if args.bank_action == "apply":
+            preset = library.load_bank(args.name)
+            dev = _make_device(args)
+            if args.dry_run:
+                return _preview(dev, preset.programs)
+            if not args.yes:
+                n = len(preset.programs)
+                prompt = (f"About to overwrite {n} slot(s) from bank {args.name!r}. "
+                          "Proceed? [y/N] ")
+                if not _confirm(prompt):
+                    _eprint("aborted; nothing written")
+                    return 1
+            results = dev.load(preset, verify=not args.no_verify)
+            for r in results:
+                print(f"  slot {r.slot}: verified={r.verified}")
+            if results:
+                print(f"backup: {results[0].backup_path}")
+            return 0
+    except library.LibraryError as exc:
+        _eprint(f"error: {exc}")
+        return 1
+
+    _eprint("unknown bank action")
+    return 2
 
 
 # --- helpers --------------------------------------------------------------
@@ -398,7 +612,8 @@ def _warn_unverified() -> None:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="lpk25", description="Akai LPK25 mk1 editor")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    p.add_argument("--port", default="LPK25", help="substring to match the MIDI port name")
+    p.add_argument("--port", default=None,
+                   help="substring to match the MIDI port name (default: LPK25, or config)")
     p.add_argument("--in-port", default=None, help="exact MIDI input port name")
     p.add_argument("--out-port", default=None, help="exact MIDI output port name")
     p.add_argument(
@@ -406,14 +621,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="device model byte (e.g. 0x76); overrides the default guess",
     )
     p.add_argument("--mock", action="store_true", help="use the in-memory fake device")
+    p.add_argument(
+        "--dry-run", action="store_true",
+        help="for write commands: read the target slot(s) and print what would "
+             "change, without writing or backing up",
+    )
 
     sub = p.add_subparsers(dest="command", required=True)
 
     sub.add_parser("ports", help="list MIDI ports").set_defaults(func=cmd_ports)
     sub.add_parser("identify", help="device inquiry + model probe").set_defaults(func=cmd_identify)
+    sub.add_parser("config", help="show the effective configuration and file path"
+                   ).set_defaults(func=cmd_config)
 
-    mon = sub.add_parser("monitor", help="print the keyboard's live MIDI output")
+    comp = sub.add_parser(
+        "completion",
+        help="print a shell completion script to eval in your shell startup file",
+    )
+    comp.add_argument("shell", nargs="?", choices=_COMPLETION_SHELLS,
+                      help="target shell (default: autodetect from $SHELL)")
+    comp.set_defaults(func=cmd_completion)
+
+    mon = sub.add_parser("monitor", help="print the keyboard's live MIDI output (decoded)")
     mon.add_argument("--seconds", type=float, default=30.0)
+    mon.add_argument("--raw", action="store_true", help="print raw hex instead of decoded text")
+    mon.add_argument("--all", action="store_true",
+                     help="also show Active Sensing and Clock (hidden by default)")
+    mon.add_argument("--timestamps", action="store_true",
+                     help="prefix each line with a relative timestamp")
     mon.set_defaults(func=cmd_monitor)
 
     rr = sub.add_parser("raw-recv", help="capture raw MIDI to a .syx file")
@@ -455,6 +690,12 @@ def build_parser() -> argparse.ArgumentParser:
     ed.add_argument("--no-verify", action="store_true")
     ed.set_defaults(func=cmd_edit)
 
+    ac = sub.add_parser("activate", help="recall a stored program on the device (slot 1-4)")
+    ac.add_argument("slot", type=int, choices=(1, 2, 3, 4))
+    ac.add_argument("--no-verify", action="store_true",
+                    help="don't read the active program back to confirm")
+    ac.set_defaults(func=cmd_activate)
+
     sh = sub.add_parser("show", help="human-readable readout of the device state")
     sh.add_argument("slot", type=int, nargs="?", choices=(1, 2, 3, 4))
     sh.add_argument("--json", action="store_true", help="print dump JSON instead")
@@ -479,6 +720,31 @@ def build_parser() -> argparse.ArgumentParser:
     pr_list = pr_sub.add_parser("list", help="list saved presets")
     pr_list.set_defaults(func=cmd_preset)
 
+    bk = sub.add_parser("bank", help="named full-device bank library (all 4 programs)")
+    bk_sub = bk.add_subparsers(dest="bank_action", required=True)
+
+    bk_save = bk_sub.add_parser("save", help="dump all 4 programs into a named bank")
+    bk_save.add_argument("name")
+    bk_save.add_argument("--force", action="store_true")
+    bk_save.set_defaults(func=cmd_bank)
+
+    bk_apply = bk_sub.add_parser("apply", help="write a named bank onto all 4 slots")
+    bk_apply.add_argument("name")
+    bk_apply.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
+    bk_apply.add_argument("--no-verify", action="store_true")
+    bk_apply.set_defaults(func=cmd_bank)
+
+    bk_list = bk_sub.add_parser("list", help="list saved banks")
+    bk_list.set_defaults(func=cmd_bank)
+
+    bk_show = bk_sub.add_parser("show", help="print a bank's 4-program table")
+    bk_show.add_argument("name")
+    bk_show.set_defaults(func=cmd_bank)
+
+    bk_delete = bk_sub.add_parser("delete", help="delete a saved bank")
+    bk_delete.add_argument("name")
+    bk_delete.set_defaults(func=cmd_bank)
+
     cp = sub.add_parser("copy", help="copy a program from one slot onto others")
     cp.add_argument("src", type=int, choices=(1, 2, 3, 4))
     cp.add_argument("dst", type=int, nargs="+", choices=(1, 2, 3, 4))
@@ -502,12 +768,29 @@ def build_parser() -> argparse.ArgumentParser:
     cv.add_argument("dst", help="output file (.json or .syx)")
     cv.set_defaults(func=cmd_convert)
 
-    b = sub.add_parser("backup", help="back up all programs to a timestamped file")
-    b.add_argument("-o", "--output", default=None, help="output directory")
-    b.set_defaults(func=cmd_backup)
+    def _add_dir(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument("-o", "--output", "--dir", dest="output", default=None,
+                            help="backup directory (default: $LPK25_BACKUP_DIR)")
+
+    b = sub.add_parser("backup", help="save / list / prune device backups")
+    _add_dir(b)
+    b.set_defaults(func=cmd_backup, backup_action=None)
+    b_sub = b.add_subparsers(dest="backup_action")
+    b_save = b_sub.add_parser("save", help="save a timestamped backup (default action)")
+    _add_dir(b_save)
+    b_save.set_defaults(func=cmd_backup, backup_action="save")
+    b_list = b_sub.add_parser("list", help="list backups, newest first")
+    _add_dir(b_list)
+    b_list.set_defaults(func=cmd_backup, backup_action="list")
+    b_prune = b_sub.add_parser("prune", help="delete old backups, keeping the newest N")
+    _add_dir(b_prune)
+    b_prune.add_argument("--keep", type=int, required=True, help="number of newest backups to keep")
+    b_prune.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
+    b_prune.set_defaults(func=cmd_backup, backup_action="prune")
 
     rst = sub.add_parser("restore", help="restore programs from a backup file")
-    rst.add_argument("file")
+    rst.add_argument("file", nargs="?", help="backup file (omit with --latest)")
+    rst.add_argument("--latest", action="store_true", help="restore the most recent backup")
     rst.add_argument("--no-verify", action="store_true")
     rst.set_defaults(func=cmd_restore)
 
@@ -516,8 +799,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
+    # If argcomplete is installed and the shell is requesting completions, this
+    # exits the process; otherwise it is a no-op. Optional, so guard the import.
+    try:
+        import argcomplete
+    except ImportError:
+        pass
+    else:
+        argcomplete.autocomplete(parser)
     args = parser.parse_args(argv)
     try:
+        config.apply(args)
         return args.func(args)
     except Exception as exc:  # noqa: BLE001 - top-level user-facing handler
         _eprint(f"error: {exc}")

@@ -40,7 +40,7 @@ Each of the **4 presets** holds these editable parameters:
 | Human-readable state readout | — | ✅ (`show`) |
 | Named single-program preset library | SAVE/LOAD PRESET | ✅ (`preset save/apply/list`) |
 | Copy preset (read slot A → write slot B) | copy workflow | ✅ (`copy`, one or more dsts) |
-| Recall/activate a preset on device | (hardware PROGRAM + PROG key) | 🟡 (`activate` builder exists, no CLI cmd) |
+| Recall/activate a preset on device | (hardware PROGRAM + PROG key) | ✅ (`activate <slot>`) |
 
 ## 3. File operations (computer-side)
 

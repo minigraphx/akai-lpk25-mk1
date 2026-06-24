@@ -12,11 +12,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable
 
-from . import protocol
+from . import library, protocol
 from .model import Preset, Program
 from .transport import Transport
 
 SLOTS = (1, 2, 3, 4)
+
+# Sentinel for "use the device's configured backup directory" (distinct from
+# None, which means "skip the backup entirely").
+_DEFAULT_BACKUP_DIR = object()
 
 # Conservative rate limits to protect the device flash (from the family docs).
 MIN_DELAY_BETWEEN_FRAMES = 0.08
@@ -44,6 +48,11 @@ class Device:
         self.config = protocol.ProtocolConfig()
         if model is not None:
             self.config.model = model
+        # Default location for auto-backups and `backup` (overridable per call).
+        self.backup_dir = library.backup_dir()
+
+    def _resolve_backup_dir(self, backup_dir: object) -> str | None:
+        return self.backup_dir if backup_dir is _DEFAULT_BACKUP_DIR else backup_dir  # type: ignore[return-value]
 
     # --- read path --------------------------------------------------------
 
@@ -55,6 +64,26 @@ class Device:
             return None
         f = protocol.parse_frame(reply)
         return f.slot
+
+    def activate(self, slot: int, verify: bool = True, timeout: float = 1.0) -> int | None:
+        """Recall a stored program on the device (the hardware PROGRAM + PROG 1-4).
+
+        This selects which program is active; it does not alter program memory,
+        so no backup is taken. With ``verify``, the active program is read back
+        to confirm the switch took effect. Returns the confirmed active slot, or
+        None if the device didn't reply (or ``verify`` is off)."""
+        if slot not in SLOTS:
+            raise DeviceError(f"slot must be one of {SLOTS}, got {slot}")
+        self.transport.send(protocol.build_activate_program(slot, self.config))
+        time.sleep(MIN_DELAY_BETWEEN_FRAMES)
+        if not verify:
+            return None
+        active = self.get_active_program(timeout=timeout)
+        if active is not None and active != slot:
+            raise VerificationError(
+                f"activate slot {slot} not confirmed: device reports active slot {active}"
+            )
+        return active
 
     def get_program_payload(self, slot: int, timeout: float = 1.0) -> bytes:
         reply = self.transport.request(
@@ -89,12 +118,11 @@ class Device:
         self,
         program: Program,
         verify: bool = True,
-        backup_dir: str | None = "backups",
+        backup_dir: object = _DEFAULT_BACKUP_DIR,
     ) -> WriteResult:
         """Write one program. Auto-backs-up all slots first, then verifies."""
-        backup_path = None
-        if backup_dir is not None:
-            backup_path = self.backup(backup_dir)
+        target = self._resolve_backup_dir(backup_dir)
+        backup_path = self.backup(target) if target is not None else None
 
         payload = program.to_payload()
         self._send_program_payload(program.slot, payload)
@@ -112,9 +140,10 @@ class Device:
         return WriteResult(slot=program.slot, verified=verified, backup_path=backup_path)
 
     def load(
-        self, preset: Preset, verify: bool = True, backup_dir: str | None = "backups"
+        self, preset: Preset, verify: bool = True, backup_dir: object = _DEFAULT_BACKUP_DIR
     ) -> list[WriteResult]:
-        backup_path = self.backup(backup_dir) if backup_dir is not None else None
+        target = self._resolve_backup_dir(backup_dir)
+        backup_path = self.backup(target) if target is not None else None
         results: list[WriteResult] = []
         for i, program in enumerate(preset.programs):
             # only back up once, before the first write
@@ -129,17 +158,22 @@ class Device:
 
     # --- safety net -------------------------------------------------------
 
-    def backup(self, backup_dir: str = "backups") -> str:
-        os.makedirs(backup_dir, exist_ok=True)
+    def backup(self, backup_dir: object = _DEFAULT_BACKUP_DIR) -> str:
+        target = self._resolve_backup_dir(backup_dir)
+        if target is None:
+            target = self.backup_dir
+        os.makedirs(target, exist_ok=True)
         preset = self.dump()
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        path = os.path.join(backup_dir, f"lpk25-backup-{stamp}.json")
+        # Microsecond precision so rapid successive backups never collide and
+        # silently overwrite each other (e.g. an auto-backup during restore).
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        path = os.path.join(target, f"lpk25-backup-{stamp}.json")
         preset.save(path)
         return path
 
     def restore(self, path: str, verify: bool = True) -> list[WriteResult]:
         preset = Preset.load(path)
-        return self.load(preset, verify=verify, backup_dir="backups")
+        return self.load(preset, verify=verify)
 
     # --- behavioural oracle ----------------------------------------------
 

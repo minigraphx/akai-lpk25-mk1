@@ -1,6 +1,9 @@
 import os
 
-from lpk25.device import Device
+import pytest
+
+from lpk25 import protocol
+from lpk25.device import Device, DeviceError, VerificationError
 from lpk25.model import Preset, Program
 from lpk25.transport import MockTransport
 
@@ -18,6 +21,39 @@ def test_dump_returns_four_programs():
 
 def test_get_active_program():
     assert make_device().get_active_program() == 1
+
+
+def test_activate_changes_active_slot():
+    dev = make_device()
+    assert dev.activate(3) == 3
+    assert dev.get_active_program() == 3
+
+
+def test_activate_rejects_out_of_range_slot():
+    with pytest.raises(DeviceError):
+        make_device().activate(9)
+
+
+def test_activate_no_verify_returns_none_but_still_switches():
+    tr = MockTransport(model=0x76)
+    dev = Device(tr, model=0x76)
+    assert dev.activate(2, verify=False) is None
+    assert tr.active == 2
+
+
+def test_activate_raises_when_device_reports_other_slot():
+    # A transport that swallows the activate frame so 'active' never moves.
+    class _DropActivate(MockTransport):
+        def send(self, frame: bytes) -> None:
+            f = protocol.parse_frame(frame)
+            if f.opcode == protocol.OP_ACTIVATE_PROGRAM:
+                self.sent.append(bytes(frame))
+                return
+            super().send(frame)
+
+    dev = Device(_DropActivate(model=0x76), model=0x76)
+    with pytest.raises(VerificationError):
+        dev.activate(4)
 
 
 def test_round_trip_integrity():
